@@ -1,0 +1,41 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+instance/
+*.sqlite3
+*.db
+.pytest_cache/
+*.log
+*.tmp
+
+# Private credentials and keys
+credentials.json
+credentials.*.json
+secrets/
+*.pem
+*.key
+
+# SQLite sidecars and temporary working folders
+*.sqlite
+*.sqlite3-*
+*.sqlite-*
+*.db-*
+/tmp*/
+/temp/
+
+# Local evidence viewer/serving scratch files (retain Kane tests and evidence)
+/evidence-server*
+/evidence_server*
+/.evidence-server/
+/.testmuai/tmp/
+/.testmuai/temp/
+
+# Generated provider environment templates may contain account values
+.testmuai/**/.env.example
+
+# Keep local Kane evidence and generated run outputs out of Git
+/.testmuai/evidence/
+/.testmuai/tests/output-*/
