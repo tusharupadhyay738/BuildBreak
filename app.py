@@ -101,6 +101,8 @@ def create_app(config=None):
             abort(400)
         session.clear()
         return redirect(url_for("index"))
+    from arena import register_arena
+    register_arena(app)
     return app
 
 if __name__ == "__main__":

@@ -26,3 +26,42 @@ The Kane BuildBreakSetupCheck passed against example.com (Example Domain).
 The Kane BreakShopDiscountBaseline passed against the local BreakShop app. It added two Arena T-shirts, observed a $39.98 subtotal, applied SAVE10, and verified a $35.98 final total. This verifies only that tested flow. Checkout, saved orders, duplicate-order protection, and other cart combinations were outside that browser test.
 
 Useful Kane test definitions are included in .testmuai/tests/. Evidence archives and generated run outputs are preserved locally and excluded from Git.
+
+## Historical Arena dashboard
+
+Open `/arena` on the main BreakShop server. The shop and dashboard link to each other. Restart the main Flask server after updating the code.
+
+The read-only dashboard uses `instance/arena.sqlite3`. A fresh installation displays an empty state until an operator explicitly imports saved evidence. Missing evidence does not prevent startup. Recorded results persist independently of current local evidence availability.
+
+Create a private `instance/arena-sources.json` with this structure, replacing each value with the corresponding local file path. Use forward slashes or escaped backslashes in JSON. Keep this file in the ignored `instance` directory.
+
+```json
+{
+  "before": {
+    "report": "path/to/preserved-failed/Result.md",
+    "metadata": "path/to/preserved-failed/.internal/meta.json",
+    "actions": "path/to/preserved-failed/.internal/steps/step/flows/0/actions.ndjson",
+    "pack": "path/to/failed.evidence"
+  },
+  "after": {
+    "report": "path/to/preserved-passed/Result.md",
+    "metadata": "path/to/preserved-passed/.internal/meta.json",
+    "actions": "path/to/preserved-passed/.internal/steps/step/flows/0/actions.ndjson",
+    "pack": "path/to/passed.evidence"
+  }
+}
+```
+
+From the repository root, explicitly import the first historical discount challenge:
+
+```powershell
+.\.venv\Scripts\python.exe import_battle.py --sources instance/arena-sources.json
+.\.venv\Scripts\python.exe -m unittest -v
+.\.venv\Scripts\python.exe app.py
+```
+
+The importer supports the preserved first-challenge report and action-log format. It validates both runs before writing records and can be repeated without duplicates. Missing required report files stop the import without creating sample battles. The pack is optional for import and its availability is checked separately. Baseline, deliberate fault, and repair descriptions are human-reviewed provenance from `docs/first-battle.md`; result statuses and amounts are extracted from the saved runs. The expected amount is calculated from the unchanged 10% acceptance criterion.
+
+Raw evidence stays local. The web page displays summary records and file availability only. It has no command execution or evidence download route. Availability means that the configured file exists, not that a hosted viewer is running. It is checked when the page is loaded. Custom local configuration can set Flask's `ARENA_SOURCES` and `ARENA_DATABASE`; the defaults are the two files in `instance` above.
+
+A fresh checkout does not include the private source configuration, SQLite records, or raw evidence. It starts with an empty Arena. To reproduce the historical view, obtain the genuine preserved before/after reports and logs locally, configure their paths as above, and explicitly run the importer. Without those files, leave the dashboard empty. The ArenaDashboardBaseline Kane definition expects an already imported historical battle.
