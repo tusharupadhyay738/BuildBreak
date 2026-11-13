@@ -9,12 +9,13 @@ import sys
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
+from contextlib import closing
 
 from app import create_app
 from battle_runner import (ROOT, TEST, apply_fault, check_protected, classify_kane,
                            connect, digest, event, record_run, snapshot, validate_pack,
                            validate_repair, RejectedRepair, battle_exit_code, run_battle, main, command,
-                           failure_handoff)
+                           failure_handoff, Server)
 
 
 class BattleRunnerTests(unittest.TestCase):
@@ -160,6 +161,26 @@ class BattleRunnerTests(unittest.TestCase):
         result = command([sys.executable, '-c', 'print("finished"); raise SystemExit(7)'], self.root)
         self.assertEqual(result.returncode, 7)
         self.assertEqual(result.stdout.strip(), 'finished')
+
+    def test_server_restarts_use_fresh_databases_and_preserve_previous_orders(self):
+        workspace = self.root / 'server-workspace'
+        snapshot(ROOT, workspace)
+        server = Server(workspace.resolve(), self.root.resolve(), sys.executable)
+        try:
+            server.start()
+            first = server.database
+            with closing(sqlite3.connect(first)) as db:
+                db.execute("INSERT INTO orders(token) VALUES ('local-unit-test-fixture')")
+                db.commit()
+            server.stop()
+            server.start()
+            self.assertNotEqual(server.database, first)
+            with closing(sqlite3.connect(server.database)) as db:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM orders').fetchone()[0], 0)
+            with closing(sqlite3.connect(first)) as db:
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM orders').fetchone()[0], 1)
+        finally:
+            server.stop()
 
     def test_repair_validation_rejects_syntax_routes_and_wrong_shapes(self):
         source = (ROOT / 'app.py').read_text(encoding='utf-8')

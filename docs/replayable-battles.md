@@ -11,6 +11,13 @@ reset main, switch branches, rewrite history, or copy old project files.
 Uncommitted baseline additions are identified as an explicit snapshot rather
 than falsely attributed to the Git commit alone.
 
+Each baseline, broken-app check, and repair retest starts a fresh private shop
+database stored beside the battle artifacts. Earlier databases are retained.
+This makes the first order deterministic for recorded replay; it avoids a
+captured order-number assertion from one phase being reused against a later
+order number. The acceptance test and expected amounts stay unchanged. This
+scenario verifies a first order in each fresh fixture, not arbitrary order IDs.
+
 ## Prerequisites
 
 Install the normal project dependencies in `.venv`. Kane CLI must be available

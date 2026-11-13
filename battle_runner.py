@@ -104,13 +104,21 @@ class Server:
         self.port = available_port()
         self.process = None
         self.logs = []
+        self.starts = 0
+        self.database = None
 
     def start(self):
         # Port reservation is released before Flask binds; readiness also checks our PID.
+        # Retain each phase's database; never delete historical orders to reset a replay.
+        self.starts += 1
+        self.database = self.artifacts / f'shop-phase-{self.starts}.sqlite3'
+        if self.database.exists():
+            raise ValueError('Refusing to reuse an existing verification database')
         self.logs = [open(self.artifacts / 'server.stdout.log', 'a', encoding='utf-8'),
                      open(self.artifacts / 'server.stderr.log', 'a', encoding='utf-8')]
-        self.process = owned_spawn([self.python, '-m', 'flask', '--app', 'app:create_app',
-                                         'run', '--host', '127.0.0.1', '--port', str(self.port)],
+        launcher = ('import sys; from app import create_app; '
+                    'create_app({"DATABASE":sys.argv[1]}).run(host="127.0.0.1",port=int(sys.argv[2]))')
+        self.process = owned_spawn([self.python, '-c', launcher, str(self.database), str(self.port)],
                                         cwd=self.workspace, stdout=self.logs[0], stderr=self.logs[1])
         for _ in range(60):
             if self.process.poll() is not None:
