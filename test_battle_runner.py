@@ -13,7 +13,8 @@ from unittest.mock import patch
 from app import create_app
 from battle_runner import (ROOT, TEST, apply_fault, check_protected, classify_kane,
                            connect, digest, event, record_run, snapshot, validate_pack,
-                           validate_repair, RejectedRepair, battle_exit_code, run_battle, main, command)
+                           validate_repair, RejectedRepair, battle_exit_code, run_battle, main, command,
+                           failure_handoff)
 
 
 class BattleRunnerTests(unittest.TestCase):
@@ -116,6 +117,35 @@ class BattleRunnerTests(unittest.TestCase):
             command([sys.executable, '-c', code], self.root, timeout=.5)
         self.assertLess(time.monotonic() - started, 5)
         self.assertIn('child started', caught.exception.output)
+
+    def test_broken_pack_requires_triaged_application_assertion(self):
+        pack = self.root / 'fixture-broken.zip'
+        def write_failure(category='application_issue/ui_data_defect', message='assertion_failed: @ step 15', triage='triaged'):
+            with zipfile.ZipFile(pack, 'w') as archive:
+                archive.writestr('run.yaml', 'run_id: fixture\nenvironment:\n  surfaces:\n    - http://127.0.0.1:1234\n')
+                archive.writestr('tests/fixture/result.yaml', 'status: broken\ndefinition:\n  sha256: sha256:abc\n')
+                archive.writestr('tests/fixture/steps/15/failure.yaml',
+                                 f"error:\n  message: '{message}'\n  type: replay_failure\ntriage:\n  status: {triage}\n  rca:\n    category: {category}\n")
+        write_failure()
+        validate_pack(pack, 'fixture', 'abc', 'failed', 'http://127.0.0.1:1234')
+        with self.assertRaises(ValueError):
+            validate_pack(pack, 'fixture', 'abc', 'passed', 'http://127.0.0.1:1234')
+        for kwargs in ({'category': 'system_issue/browser_crash'}, {'message': 'navigation_timeout'}, {'triage': 'untriaged'}):
+            write_failure(**kwargs)
+            with self.assertRaises(ValueError):
+                validate_pack(pack, 'fixture', 'abc', 'failed', 'http://127.0.0.1:1234')
+
+    def test_empty_replay_summary_handoff_uses_current_observations(self):
+        pack = self.root / 'fixture-handoff.zip'
+        actions = [{'action_type': 'analyze', 'action_params': {'key': 'saved_confirmation_total'}, 'output_value': '$44.97'},
+                   {'action_type': 'analyze', 'action_params': {'key': 'cookie'}, 'output_value': 'private-cookie'}]
+        with zipfile.ZipFile(pack, 'w') as archive:
+            archive.writestr('tests/fixture/logs/3-actions.ndjson', '\n'.join(json.dumps(a) for a in actions))
+        events = [{'type': 'run_end', 'summary': ''}, {'event': 'assertion', 'passed': False, 'detail': 'Total must be $40.47'}]
+        handoff = failure_handoff(events, pack)
+        self.assertIn('Total must be $40.47', handoff)
+        self.assertIn('Observed saved_confirmation_total: $44.97', handoff)
+        self.assertNotIn('private-cookie', handoff)
 
     def test_timeout_is_bounded_when_parent_exits_before_child(self):
         code = ('import subprocess,sys; '

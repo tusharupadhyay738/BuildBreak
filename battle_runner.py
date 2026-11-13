@@ -166,14 +166,56 @@ def validate_pack(pack, evidence_id, test_hash, expected_status, url):
             raise ValueError('Unexpected evidence metadata size')
         run = archive.read('run.yaml').decode('utf-8')
         result = archive.read(results[0]).decode('utf-8')
+        recorded = re.search(r'^status: (\w+)[ \t]*$', result, re.M)
+        recorded_status = recorded[1] if recorded else None
+        triaged_assertion = False
+        if expected_status == 'failed' and recorded_status == 'broken':
+            prefix = results[0].rsplit('/', 1)[0] + '/steps/'
+            for name in archive.namelist():
+                if not name.startswith(prefix) or not name.endswith('/failure.yaml'):
+                    continue
+                if archive.getinfo(name).file_size > 1000000:
+                    raise ValueError('Unexpected failure metadata size')
+                failure = archive.read(name).decode('utf-8')
+                lines = [line.strip() for line in failure.splitlines() if line.strip()]
+                triaged = any(lines[i:i+2] == ['triage:', 'status: triaged'] for i in range(len(lines)))
+                if (triaged and 'type: replay_failure' in lines
+                        and re.search(r"message: ['\"]?assertion_failed:", failure)
+                        and re.search(r'category: application_issue/[a-z_]+', failure)):
+                    triaged_assertion = True
     if not re.search(r'^run_id: ' + re.escape(evidence_id) + r'\s*$', run, re.M):
         raise ValueError('Evidence identifier mismatch')
-    if not re.search(r'^status: ' + re.escape(expected_status) + r'\s*$', result, re.M):
+    if recorded_status != expected_status and not triaged_assertion:
         raise ValueError('Evidence verdict disagrees with current event stream')
     if not re.search(r'^  sha256: sha256:' + re.escape(test_hash) + r'\s*$', result, re.M):
         raise ValueError('Evidence test hash mismatch')
     if not re.search(r'^    - ' + re.escape(url) + r'\s*$', run, re.M):
         raise ValueError('Evidence target does not match isolated app')
+
+def failure_handoff(events, pack):
+    """Use current assertion events and sealed observations, not cached authoring reports."""
+    notes = [e['summary'] for e in events if e.get('type') == 'run_end' and e.get('summary')]
+    notes += ['Failed assertion: ' + str(e.get('detail', '')) for e in events
+              if e.get('event') == 'assertion' and e.get('passed') is False]
+    if pack.is_file():
+        with zipfile.ZipFile(pack) as archive:
+            for name in archive.namelist():
+                if not name.startswith('tests/') or not name.endswith('-actions.ndjson'):
+                    continue
+                if archive.getinfo(name).file_size > 20000000:
+                    continue
+                for line in archive.read(name).decode('utf-8').splitlines():
+                    try:
+                        action = json.loads(line)
+                    except ValueError:
+                        continue
+                    key = action.get('action_params', {}).get('key', '')
+                    value = action.get('output_value')
+                    if (action.get('action_type') == 'analyze' and isinstance(key, str)
+                            and re.search(r'total|discount|order_number', key)
+                            and isinstance(value, str) and re.fullmatch(r'\$?\d+(?:\.\d{2})?', value)):
+                        notes.append(f'Observed {key}: {value}')
+    return '\n'.join(notes)[-12000:]
 
 def run_kane(workspace, artifacts, url, name, kane, timeout=1200):
     artifacts.mkdir(parents=True, exist_ok=False)
@@ -232,10 +274,9 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200):
         except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:
             (artifacts / 'validation-error.txt').write_text(str(error), encoding='utf-8')
             result = 'infrastructure_error'
-    reports = [e.get('summary', '') for e in events if e.get('type') == 'run_end']
     return dict(result=result, evidence_id=evidence, pack_hash=pack_hash,
                 test_hash=test_hash, duration=round(time.monotonic() - started, 2),
-                failure='\n'.join(reports)[-12000:])
+                failure=failure_handoff(events, artifacts / 'run.evidence') if result == 'verification_failed' else '')
 
 def record_run(database, battle, phase, attempt, result):
     with connect(database) as db:

@@ -52,6 +52,11 @@ run creates them. Existing historical first-battle imports still work.
    A replay may retain older authoring output; those files are archived as
    `cached-authoring-output`, with a provenance note, never treated as the
    report for the new replay. The current events and pack remain authoritative.
+   Some replay assertion failures are sealed as `broken`. These are accepted
+   as verification failures only when the current stream contains a failed
+   assertion and the same pack records a triaged application issue caused by
+   `assertion_failed` replay execution. An untriaged or browser/system failure
+   stays an infrastructure error. A broken pack is never accepted as a pass.
 4. A completed failing assertion is recorded as `verification_failed`.
    Authentication/browser/timeout/incomplete-output failures are recorded as
    infrastructure failures and do not award a bug detection or repair win.
@@ -60,6 +65,9 @@ run creates them. Existing historical first-battle imports still work.
    and earlier chat are not supplied. The Builder uses a read-only session to
    return a complete proposed `app.py`; the runner validates syntax and route
    declarations before applying the candidate to the isolated app.
+   Replay summaries may be empty; the handoff also includes the current failed
+   assertion and allowlisted numeric observations from the sealed action log.
+   Raw network logs, cookies and cached authoring reports are not supplied.
 6. The baseline's unit tests and Kane test remain protected by hashes. Each
    repair must pass unit tests before Kane retests. At most three repair
    attempts are allowed. A persistent failure ends as `needs_human`.
