@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>BuildBreak Arena</title><link rel="stylesheet" href="{{ url_for('static', filename='arena.css') }}"></head>
 <body><main><nav><a href="/">BreakShop</a> / Arena</nav><h1>BuildBreak Arena</h1>
+<section id="live-battles" aria-label="Runner battle history">{% include 'live_battles.html' %}</section>
+<script>
+setInterval(async () => {
+  try {
+    const response = await fetch('/arena/live', {cache: 'no-store'});
+    if (response.ok) document.getElementById('live-battles').innerHTML = await response.text();
+  } catch (_) { /* Retain last recorded view when the connection is unavailable. */ }
+}, 3000);
+</script>
 {% if not battle %}<p>No historical battle has been imported.</p>{% else %}
 <p class="label">Historical - Human-triggered</p><h2>Discount regression</h2><p>A deliberately seeded challenge, repaired by the Builder after a human-requested Kane test.</p>
 <ol class="timeline"><li><h3>Baseline</h3><code>{{ battle.baseline }}</code></li><li><h3>Deliberately seeded fault</h3><p>{{ battle.fault }}</p></li>

@@ -1,5 +1,23 @@
 # BreakShop
 
+BuildBreak Arena now includes a local replayable battle runner. See
+[the runner guide](docs/replayable-battles.md) for setup, its protected test
+contract, private evidence storage, and honest limits. Start the main app and
+open `/arena` to see automatically recorded runner events.
+
+```powershell
+.\.venv\Scripts\python.exe battle_runner.py --breaker codex --builder codex --max-attempts 3
+```
+
+This command requires your own authenticated Kane CLI and Codex CLI sessions.
+It uses separate Codex contexts for controlled fault selection and repair,
+and real Kane browser runs. It does not assume an API key or ship credentials.
+It operates on an explicit snapshot of the current working tree and keeps the
+main app unchanged. A maximum of three repair attempts is enforced.
+
+The stronger checkout baseline and the manually orchestrated second battle
+are documented in [checkout consistency](docs/checkout-consistency.md).
+
 Small Flask + SQLite demo shop with HTML, CSS, and vanilla JavaScript. Prices are USD; integer cents and decimal half-up discount rounding keep totals accurate. SAVE10 deducts 10%; no tax or shipping is charged. No real payment is collected.
 
 ## Windows PowerShell setup

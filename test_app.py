@@ -61,5 +61,32 @@ class ShopTests(unittest.TestCase):
             self.assertNotIn("coupon", session)
         self.assertEqual(self.client.post("/checkout", data={"token": "wrong"}).status_code, 400)
 
+    def test_multi_product_order_survives_confirmation_reload(self):
+        self.post("/cart", product="1", quantity="2")
+        self.post("/cart", product="3", quantity="1")
+        self.post("/coupon", coupon="SAVE10")
+        response = self.post("/checkout", name="Arena Tester", email="arena@example.com", address="123 Test Lane, Demo City")
+        for _ in range(2):
+            page = self.client.get(response.location)
+            self.assertEqual(page.status_code, 200)
+            for amount in (b"Subtotal: $44.97", b"Discount: $4.50", b"Total: $40.47"):
+                self.assertIn(amount, page.data)
+        with closing(sqlite3.connect(self.database)) as connection:
+            self.assertEqual(connection.execute("SELECT subtotal,discount,total FROM orders").fetchone(), (4497, 450, 4047))
+
+    def test_new_order_resets_cart_coupon_and_order_access(self):
+        self.post("/cart", product="1", quantity="2")
+        self.post("/coupon", coupon="SAVE10")
+        order = self.post("/checkout", name="Arena Tester", email="arena@example.com", address="123 Test Lane")
+        self.assertEqual(self.client.post("/new-cart", data={"token": "wrong"}).status_code, 400)
+        self.post("/new-cart")
+        self.client.get("/")
+        with self.client.session_transaction() as session:
+            self.assertNotEqual(session["checkout_token"], self.token)
+            self.assertFalse(session.get("cart"))
+            self.assertNotIn("coupon", session)
+        self.assertEqual(self.client.get(order.location).status_code, 404)
+        self.assertEqual(self.count(), 1)
+
 if __name__ == "__main__":
     unittest.main()

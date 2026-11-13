@@ -1,0 +1,16 @@
+<h2>Replayable battles</h2>
+<p>These records come from the local runner. The page refreshes this section every three seconds. Recorded results are historical observations, not a claim that the app still passes now.</p>
+{% if not sessions %}<p>No runner battles yet. Start one from your local terminal; this page cannot execute commands.</p>{% endif %}
+{% for session in sessions %}
+<article class="battle-card">
+<p class="label">{{ session.mode }} - deliberately seeded challenge</p>
+<h3>Battle {{ session.id }}</h3>
+<p><strong>State:</strong> {{ session.state }} | <strong>Repair attempts:</strong> {{ session.attempts }} / 3 maximum</p>
+<details><summary>Baseline snapshot</summary><code>{{ session.baseline }}</code></details>
+<ol class="timeline">{% for event in session.events %}<li><time>{{ event.at }}</time><p>{{ event.message }}</p></li>{% endfor %}</ol>
+{% if session.verifications %}<div class="table-wrap"><table><thead><tr><th>Phase</th><th>Result</th><th>Evidence</th><th>Duration</th></tr></thead><tbody>
+{% for run in session.verifications %}<tr><td>{{ run.phase }}{% if run.attempt %} attempt {{ run.attempt }}{% endif %}</td><td>{{ run.result }}</td><td>{% if run.evidence_id %}<code>{{ run.evidence_id }}</code>{% else %}Unavailable{% endif %}<br>{{ 'Pack archived and hashed at execution' if run.pack_hash else 'Pack not archived' }}</td><td>{{ run.duration }}s</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+<p>Acceptance criteria are frozen by file hash. A completed battle proves only this checkout scenario. The Codex Breaker selects from a controlled fault library; this is not open-ended vulnerability discovery. Builder context excludes the original source and fault record, but directory separation is not a confidentiality boundary.</p>
+</article>
+{% endfor %}

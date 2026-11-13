@@ -1,0 +1,2 @@
+# Keep browser acceptance definitions byte-stable across Windows and Unix clones.
+/.testmuai/tests/*_test.md text eol=lf
