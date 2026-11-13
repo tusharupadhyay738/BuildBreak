@@ -5,6 +5,12 @@ BuildBreak Arena now includes a local replayable battle runner. See
 contract, private evidence storage, and honest limits. Start the main app and
 open `/arena` to see automatically recorded runner events.
 
+The Arena view separates baseline, broken-app and repaired-app verdicts. Choose
+among recent recorded battles; expand the timeline, evidence references, or
+method details when needed. Times are shown in IST. Its three-second refresh
+retains open detail panels and shows a connection warning if refresh fails.
+For presenting the project, use the [three-minute demo guide](docs/demo-guide.md).
+
 ```powershell
 .\.venv\Scripts\python.exe battle_runner.py --breaker codex --builder codex --max-attempts 3
 ```

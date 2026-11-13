@@ -1,16 +1,32 @@
-<h2>Replayable battles</h2>
-<p>These records come from the local runner. The page refreshes this section every three seconds. Recorded results are historical observations, not a claim that the app still passes now.</p>
-{% if not sessions %}<p>No runner battles yet. Start one from your local terminal; this page cannot execute commands.</p>{% endif %}
-{% for session in sessions %}
+<div class="section-heading"><div><p class="eyebrow">THE PROOF</p><h2>Battle results</h2></div><span class="muted">{{ sessions|length }} recent {{ 'battle' if sessions|length == 1 else 'battles' }}</span></div>
+{% if not sessions %}
+<div class="empty-state"><h3>No runner battles yet</h3><p>Your Arena starts empty. Run a battle from the project terminal to record real results here.</p></div>
+{% else %}
+<nav class="battle-picker" aria-label="Choose a recorded battle">
+{% for session in sessions %}<a href="{{ url_for('arena', battle=session.id) }}" {% if session.id == selected_id %}aria-current="page"{% endif %}>{{ session.created|arena_time }}<span>{{ session.state|arena_state }}</span></a>{% endfor %}
+</nav>
+{% set chosen = sessions|selectattr('id', 'equalto', selected_id)|list %}
+{% if not chosen %}<div class="empty-state"><h3>Battle unavailable</h3><p>This battle is not in the ten most recent records. Choose an available battle above.</p></div>{% endif %}
+{% for session in chosen %}
 <article class="battle-card">
-<p class="label">{{ session.mode }} - deliberately seeded challenge</p>
-<h3>Battle {{ session.id }}</h3>
-<p><strong>State:</strong> {{ session.state }} | <strong>Repair attempts:</strong> {{ session.attempts }} / 3 maximum</p>
-<details><summary>Baseline snapshot</summary><code>{{ session.baseline }}</code></details>
-<ol class="timeline">{% for event in session.events %}<li><time>{{ event.at }}</time><p>{{ event.message }}</p></li>{% endfor %}</ol>
-{% if session.verifications %}<div class="table-wrap"><table><thead><tr><th>Phase</th><th>Result</th><th>Evidence</th><th>Duration</th></tr></thead><tbody>
-{% for run in session.verifications %}<tr><td>{{ run.phase }}{% if run.attempt %} attempt {{ run.attempt }}{% endif %}</td><td>{{ run.result }}</td><td>{% if run.evidence_id %}<code>{{ run.evidence_id }}</code>{% else %}Unavailable{% endif %}<br>{{ 'Pack archived and hashed at execution' if run.pack_hash else 'Pack not archived' }}</td><td>{{ run.duration }}s</td></tr>{% endfor %}
-</tbody></table></div>{% endif %}
-<p>Acceptance criteria are frozen by file hash. A completed battle proves only this checkout scenario. The Codex Breaker selects from a controlled fault library; this is not open-ended vulnerability discovery. Builder context excludes the original source and fault record, but directory separation is not a confidentiality boundary.</p>
+<header class="battle-header"><div><p class="eyebrow">CHECKOUT CONSISTENCY</p><h3>{{ session.state|arena_state }}</h3><p class="muted">Recorded {{ session.created|arena_time }}</p></div><span class="verdict {{ 'good' if session.state == 'completed' else 'attention' if session.state in ['needs_human','baseline_blocked','infrastructure_error','not_detected'] else 'neutral' }}">{{ session.state|arena_state }}</span></header>
+{% if session.state == 'completed' %}<p class="outcome">Kane detected a controlled defect, then verified the Builder's repair through checkout and confirmation reload.</p>
+{% elif session.state == 'infrastructure_error' %}<p class="outcome">Verification could not finish reliably. This battle has no verified repair.</p>
+{% elif session.state == 'needs_human' %}<p class="outcome">The repair limit was reached. A human needs to review the unresolved result.</p>
+{% elif session.state == 'not_detected' %}<p class="outcome">The test did not detect the seeded fault. This is not a successful battle.</p>
+{% else %}<p class="outcome">Follow the recorded stages below. A repair is verified only after Kane passes the final browser test.</p>{% endif %}
+<div class="battle-facts"><div><span>Repair attempts used</span><strong>{{ session.attempts }}</strong></div><div><span>Attempt ceiling</span><strong>3</strong></div><div><span>Participants</span><strong class="participant">{{ 'Separate Codex sessions' if session.mode == 'codex Breaker / codex Builder' else 'Human-assisted workflow' }}</strong></div></div>
+<h4>Independent checks</h4>
+<div class="checks">
+{% for phase, title in [('baseline','01 · Healthy baseline'),('before','02 · Broken application'),('after','03 · Repaired application')] %}
+{% set phase_runs = session.verifications|selectattr('phase','equalto',phase)|list %}
+<section class="check"><h5>{{ title }}</h5>{% if phase_runs %}{% set latest = phase_runs[-1] %}<p class="check-result {{ 'good-text' if latest.result == 'passed' else 'bad-text' }}">{{ latest.result|arena_state }}</p><p class="muted">{{ latest.duration|round(1) }} seconds{% if latest.attempt %} · attempt {{ latest.attempt }}{% endif %}</p>{% else %}<p class="check-result muted">Not recorded</p>{% endif %}</section>
+{% endfor %}
+</div>
+<p class="scope-note">The same acceptance test checks product prices, cart totals, fictional checkout, and saved confirmation after reload. These are the recorded results for this battle.</p>
+<details data-key="timeline-{{ session.id }}"><summary>Follow the battle timeline <span>{{ session.events|length }} recorded events</span></summary><ol class="timeline">{% for event in session.events %}<li><time datetime="{{ event.at }}">{{ event.at|arena_time }}</time><p>{{ event.message }}</p></li>{% endfor %}</ol></details>
+<details data-key="evidence-{{ session.id }}"><summary>Inspect evidence references</summary><p class="muted">These are recorded execution references. Raw packs stay private; the archive status below describes what was captured at execution time.</p><div class="table-wrap"><table><thead><tr><th>Check</th><th>Recorded result</th><th>Execution reference</th></tr></thead><tbody>{% for run in session.verifications %}<tr><th>{{ {'baseline':'Baseline','before':'Before repair','after':'After repair'}.get(run.phase, run.phase) }}{% if run.attempt %} · {{ run.attempt }}{% endif %}</th><td>{{ run.result|arena_state }}<br><small>{{ 'Pack archived and hashed at execution' if run.pack_hash else 'Pack unavailable' }}</small></td><td><code>{{ run.evidence_id or 'Unavailable' }}</code></td></tr>{% endfor %}</tbody></table></div></details>
+<details data-key="method-{{ session.id }}"><summary>Method and limitations</summary><p>{{ session.mode }}. The Breaker selects from two controlled faults; it does not discover arbitrary vulnerabilities. The Builder receives a separate context containing the broken app and failure evidence. This separation reduces answer leakage but is not a confidentiality boundary.</p><p>Completed results cover the tested checkout scenario, not full-app correctness. Historical results do not establish the app's current behavior.</p><p>Baseline: <code>{{ session.baseline }}</code></p><p>Battle ID: <code>{{ session.id }}</code></p></details>
 </article>
 {% endfor %}
+{% endif %}

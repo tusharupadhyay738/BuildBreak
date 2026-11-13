@@ -81,7 +81,7 @@ class BattleRunnerTests(unittest.TestCase):
         client = app.test_client()
         page = client.get('/arena/live')
         self.assertEqual(page.status_code, 200)
-        for value in (b'real-record', b'awaiting_builder', b'verification_failed', b'recorded-run'):
+        for value in (b'real-record', b'Waiting for the Builder', b'Defect detected', b'recorded-run'):
             self.assertIn(value, page.data)
         self.assertNotIn(str(self.root).encode(), page.data)
         self.assertEqual(client.post('/arena/live').status_code, 405)
@@ -92,6 +92,32 @@ class BattleRunnerTests(unittest.TestCase):
         app = create_app({'TESTING': True, 'DATABASE': str(self.root / 'shop.sqlite3'),
                           'ARENA_DATABASE': str(self.root / 'arena.sqlite3')})
         self.assertIn(b'No runner battles yet', app.test_client().get('/arena/live').data)
+
+    def test_selected_battle_keeps_success_separate_from_interrupted_run(self):
+        database = self.root / 'arena.sqlite3'
+        app = create_app({'TESTING': True, 'DATABASE': str(self.root / 'shop.sqlite3'), 'ARENA_DATABASE': str(database)})
+        client = app.test_client()
+        with connect(database) as db:
+            db.executemany('INSERT INTO arena_sessions VALUES (?,?,?,?,?,?)', [
+                ('fixture-completed', '2026-11-13T00:00:00+00:00', 'completed', 'baseline', 'codex Breaker / codex Builder', 1),
+                ('fixture-interrupted', '2026-11-13T01:00:00+00:00', 'infrastructure_error', 'baseline', 'codex Breaker / codex Builder', 0)])
+        interrupted = client.get('/arena/live?battle=fixture-interrupted').data
+        self.assertIn(b'This battle has no verified repair', interrupted)
+        self.assertNotIn(b'Kane detected a controlled defect, then verified', interrupted)
+        self.assertEqual(interrupted.count(b'<article class="battle-card">'), 1)
+        completed = client.get('/arena/live?battle=fixture-completed').data
+        self.assertIn(b'Kane detected a controlled defect, then verified', completed)
+        self.assertNotIn(b'This battle has no verified repair', completed)
+        self.assertIn(b'05:30 AM IST', completed)
+
+    def test_unknown_battle_has_honest_empty_selection(self):
+        database = self.root / 'arena.sqlite3'
+        app = create_app({'TESTING': True, 'DATABASE': str(self.root / 'shop.sqlite3'), 'ARENA_DATABASE': str(database)})
+        with connect(database) as db:
+            db.execute('INSERT INTO arena_sessions VALUES (?,?,?,?,?,?)', ('fixture', '2026-11-13T00:00:00+00:00', 'completed', 'baseline', 'fixture', 1))
+        page = app.test_client().get('/arena/live?battle=missing').data
+        self.assertIn(b'Battle unavailable', page)
+        self.assertNotIn(b'<article class="battle-card">', page)
 
     def test_evidence_identity_verdict_test_hash_and_target_must_agree(self):
         # Synthetic metadata fixture, never presented as a real Kane execution.

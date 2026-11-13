@@ -3,7 +3,24 @@ import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
-from flask import render_template
+from flask import render_template, request
+from datetime import datetime, timedelta, timezone
+
+STATE_LABELS = {
+    'prepared': 'Battle prepared', 'verifying': 'Kane is checking',
+    'fault_seeded': 'Challenge ready', 'repairing': 'Builder is repairing',
+    'completed': 'Repair verified', 'awaiting_builder': 'Waiting for the Builder',
+    'needs_human': 'Human review needed', 'baseline_blocked': 'Baseline blocked',
+    'not_detected': 'Fault was not detected', 'infrastructure_error': 'Verification interrupted',
+    'passed': 'Passed', 'verification_failed': 'Defect detected', 'failed': 'Failed',
+}
+
+def display_time(value):
+    try:
+        local = datetime.fromisoformat(value).astimezone(timezone(timedelta(hours=5, minutes=30)))
+        return local.strftime('%d %b, %I:%M %p') + ' IST'
+    except (ValueError, TypeError):
+        return 'Time unavailable'
 
 SCHEMA = """CREATE TABLE IF NOT EXISTS battles (
  id TEXT PRIMARY KEY, baseline TEXT, fault TEXT, repair TEXT);
@@ -28,6 +45,8 @@ def availability(source):
         return "Unable to check"
 
 def register_arena(app):
+    app.jinja_env.filters['arena_state'] = lambda value: STATE_LABELS.get(value, 'Unknown state')
+    app.jinja_env.filters['arena_time'] = display_time
     app.config.setdefault("ARENA_DATABASE", str(Path(app.instance_path) / "arena.sqlite3"))
     app.config.setdefault("ARENA_SOURCES", str(Path(app.instance_path) / "arena-sources.json"))
     with closing(sqlite3.connect(app.config["ARENA_DATABASE"])) as connection:
@@ -48,7 +67,9 @@ def register_arena(app):
 
     @app.get("/arena/live")
     def arena_live():
-        response = app.make_response(render_template("live_battles.html", sessions=live_battles()))
+        sessions = live_battles()
+        selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
+        response = app.make_response(render_template("live_battles.html", sessions=sessions, selected_id=selected))
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -65,4 +86,6 @@ def register_arena(app):
             if not isinstance(source, dict):
                 source = {}
             evidence[run["phase"]] = {key: availability(source.get(key)) for key in ("report", "pack")}
-        return render_template("arena.html", battle=battle, runs=runs, evidence=evidence, sessions=live_battles())
+        sessions = live_battles()
+        selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
+        return render_template("arena.html", battle=battle, runs=runs, evidence=evidence, sessions=sessions, selected_id=selected)

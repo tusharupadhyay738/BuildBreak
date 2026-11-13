@@ -1,19 +1,38 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>BuildBreak Arena</title><link rel="stylesheet" href="{{ url_for('static', filename='arena.css') }}"></head>
-<body><main><nav><a href="/">BreakShop</a> / Arena</nav><h1>BuildBreak Arena</h1>
+<body><main><nav class="top-nav"><a href="/arena" aria-label="BuildBreak Arena home">BUILD<span>BREAK</span></a><a href="/">Open BreakShop ↗</a></nav>
+<header class="hero"><p class="eyebrow">BUILD · CHALLENGE · VERIFY</p><h1>Two agents.<br>One application.<br><span>Kane decides.</span></h1><p>BuildBreak Arena puts AI repairs to the test. A Builder repairs the code. Kane checks the real browser behavior. Every recorded verdict has an execution behind it.</p></header>
+<section class="roles" aria-label="How BuildBreak works"><article><span>01 / BREAKER</span><h2>Challenge the claim.</h2><p>Select a controlled fault in an isolated copy of the app.</p></article><article><span>02 / BUILDER</span><h2>Repair from evidence.</h2><p>Read the failure and propose a fix, with at most three attempts.</p></article><article><span>03 / KANE</span><h2>Verify what happens.</h2><p>Test the checkout in a real browser and confirm the repair.</p></article></section>
+<div class="refresh-status"><span class="pulse" aria-hidden="true"></span><span id="connection-status" role="status">Showing recorded results · auto-refresh on</span></div>
 <section id="live-battles" aria-label="Runner battle history">{% include 'live_battles.html' %}</section>
 <script>
+let previousMarkup = '';
+let refreshing = false;
 setInterval(async () => {
+  if (document.hidden || refreshing) return;
+  refreshing = true;
   try {
-    const response = await fetch('/arena/live', {cache: 'no-store'});
-    if (response.ok) document.getElementById('live-battles').innerHTML = await response.text();
-  } catch (_) { /* Retain last recorded view when the connection is unavailable. */ }
+    const response = await fetch('/arena/live' + window.location.search, {cache: 'no-store'});
+    if (!response.ok) throw new Error('Refresh unavailable');
+    const markup = await response.text();
+    if (markup !== previousMarkup) {
+      const panel = document.getElementById('live-battles');
+      const opened = new Set([...panel.querySelectorAll('details[open][data-key]')].map(el => el.dataset.key));
+      panel.innerHTML = markup;
+      panel.querySelectorAll('details[data-key]').forEach(el => el.open = opened.has(el.dataset.key));
+      previousMarkup = markup;
+    }
+    document.getElementById('connection-status').textContent = 'Showing recorded results · auto-refresh on';
+  } catch (_) {
+    document.getElementById('connection-status').textContent = 'Connection unavailable · showing last recorded results';
+  } finally { refreshing = false; }
 }, 3000);
 </script>
+<details class="historical"><summary>Earlier human-triggered experiment</summary>
 {% if not battle %}<p>No historical battle has been imported.</p>{% else %}
 <p class="label">Historical - Human-triggered</p><h2>Discount regression</h2><p>A deliberately seeded challenge, repaired by the Builder after a human-requested Kane test.</p>
 <ol class="timeline"><li><h3>Baseline</h3><code>{{ battle.baseline }}</code></li><li><h3>Deliberately seeded fault</h3><p>{{ battle.fault }}</p></li>
 {% for run in runs %}{% if run.phase == 'after' %}<li><h3>Builder repair</h3><p>{{ battle.repair }}</p></li>{% endif %}<li><h3>Kane {{ 'before repair' if run.phase == 'before' else 'after repair' }} - {{ run.result }}</h3><p>Execution <code>{{ run.execution_id }}</code></p><p>Recorded against port 5001.</p></li>{% endfor %}</ol>
 <h2>Expected versus actual</h2><div class="table-wrap"><table><thead><tr><th>Recorded run</th><th>Subtotal</th><th>Expected total</th><th>Actual total</th></tr></thead><tbody>{% for run in runs %}<tr><th>{{ 'Before repair' if run.phase == 'before' else 'After repair' }}</th><td>{{ run.subtotal|money }}</td><td>{{ run.expected|money }}</td><td>{{ run.actual|money }}</td></tr>{% endfor %}</tbody></table></div>
 <h2>Current evidence availability</h2><p>Local file availability is checked separately from the recorded run results.</p>{% for run in runs %}<p><strong>{{ 'Before repair' if run.phase == 'before' else 'After repair' }}</strong> - Report: {{ evidence[run.phase].report }} - Pack: {{ evidence[run.phase].pack }}</p>{% endfor %}
-<h2>What was verified</h2><p>The unchanged test asks for quantity 2, SAVE10, and a final total equal to the subtotal minus 10%. The runs exercised two Arena T-shirts. The action sequences differed: before repair Kane set quantity before adding; after repair it added first, then updated quantity. The failed run compared percentages; the passing run checked the difference in cents.</p><p>The failed report's &quot;undiscounted&quot; wording is inaccurate: its recorded total shows a 5% discount.</p><p>Verification covers this discount flow. Checkout, saved orders, duplicate-order protection, other cart combinations, and full-app correctness are outside this browser result's scope.</p>{% endif %}</main></body></html>
+<h2>What was verified</h2><p>The unchanged test asks for quantity 2, SAVE10, and a final total equal to the subtotal minus 10%. The runs exercised two Arena T-shirts. The action sequences differed: before repair Kane set quantity before adding; after repair it added first, then updated quantity. The failed run compared percentages; the passing run checked the difference in cents.</p><p>The failed report's &quot;undiscounted&quot; wording is inaccurate: its recorded total shows a 5% discount.</p><p>Verification covers this discount flow. Checkout, saved orders, duplicate-order protection, other cart combinations, and full-app correctness are outside this browser result's scope.</p>{% endif %}</details><footer>BuildBreak Arena · Real browser evidence. Explicit limits. No simulated victories.</footer></main></body></html>
