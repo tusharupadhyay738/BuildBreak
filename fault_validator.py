@@ -154,7 +154,8 @@ print(json.dumps({'run': result.testsRun, 'failures': len(result.failures),
 
 def json_command(python, script, workspace, artifacts, name, args=()):
     try:
-        result = run([python, '-c', script, *map(str, args)], cwd=workspace, timeout=120)
+        result = run([python, '-c', script, *map(str, args)], cwd=workspace, timeout=120,
+                     environment='app')
     except subprocess.TimeoutExpired:
         raise InvalidFault(name + ' exceeded its deadline.') from None
     (artifacts / (name + '.log')).write_text(result.stdout + result.stderr, encoding='utf-8')

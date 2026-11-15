@@ -2,6 +2,7 @@
 import os
 import signal
 import subprocess
+from pathlib import Path
 
 
 class WindowsJob:
@@ -105,16 +106,32 @@ def communicate(process, timeout, input_text=None):
         raise subprocess.TimeoutExpired(process.args, timeout, output=output, stderr=errors) from original
 
 
-def child_environment():
-    """Breaker credentials must not reach the app, tests, Kane or Builder."""
-    return {key: value for key, value in os.environ.items()
-            if key.upper() not in {'GEMINI_API_KEY', 'GOOGLE_API_KEY'}}
+def child_environment(role='cli', cwd=None):
+    """Apps/tests get an allowlist; authenticated CLIs keep their own setup."""
+    if role not in {'app', 'cli'}:
+        raise ValueError('Unknown child environment role')
+    allowed = {'PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT',
+               'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH',
+               'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ'}
+    environment = {key: value for key, value in os.environ.items()
+                   if key.upper() not in {'GEMINI_API_KEY', 'GOOGLE_API_KEY'}
+                   and (role == 'cli' or key.upper() in allowed)}
+    if role == 'app':
+        if cwd is None:
+            raise ValueError('App environment requires its isolated working directory')
+        temporary = Path(cwd).resolve() / 'instance/subprocess-temp'
+        temporary.mkdir(parents=True, exist_ok=True)
+        environment.update(TEMP=str(temporary), TMP=str(temporary),
+                           PYTHONIOENCODING='utf-8', PYTHONUTF8='1',
+                           PYTHONNOUSERSITE='1', PYTHONDONTWRITEBYTECODE='1')
+    return environment
 
 
-def run(args, cwd, timeout=60, input_text=None, stderr=None):
+def run(args, cwd, timeout=60, input_text=None, stderr=None, environment='cli'):
     process = spawn(args, cwd=cwd, stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE if stderr is None else stderr,
-                    text=True, encoding='utf-8', errors='replace', env=child_environment())
+                    text=True, encoding='utf-8', errors='replace',
+                    env=child_environment(environment, cwd))
     try:
         output, errors = communicate(process, timeout, input_text)
         return subprocess.CompletedProcess(args, process.returncode, output, errors)

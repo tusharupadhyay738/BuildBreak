@@ -1,6 +1,7 @@
 """Local battle orchestration. No commands are exposed through the web app."""
 import argparse
 import ast
+from collections import Counter
 import hashlib
 import json
 import os
@@ -88,8 +89,9 @@ def executable(name):
         raise RuntimeError(f'{name} is not installed or available on PATH')
     return found
 
-def command(args, cwd, timeout=60, input_text=None):
-    return owned_run(args, cwd=cwd, timeout=timeout, input_text=input_text)
+def command(args, cwd, timeout=60, input_text=None, environment='cli'):
+    return owned_run(args, cwd=cwd, timeout=timeout, input_text=input_text,
+                     environment=environment)
 
 def snapshot(source, destination):
     """Explicit allowlist: never copy credentials, evidence, databases or history."""
@@ -140,7 +142,7 @@ class Server:
                     'create_app({"DATABASE":sys.argv[1]}).run(host="127.0.0.1",port=int(sys.argv[2]))')
         self.process = owned_spawn([self.python, '-c', launcher, str(self.database), str(self.port)],
                                         cwd=self.workspace, stdout=self.logs[0], stderr=self.logs[1],
-                                        env=child_environment())
+                                        env=child_environment('app', self.workspace))
         for _ in range(60):
             if self.process.poll() is not None:
                 self.stop()
@@ -454,6 +456,34 @@ def builder_patch(codex, workspace, artifacts, failure, previous_test_failure=''
 class RejectedRepair(ValueError):
     pass
 
+def restricted_operations(tree):
+    """Fingerprint sensitive imports/calls, including imported aliases.
+
+    Existing trusted operations may remain unchanged. This review guard is
+    not a Python sandbox or a guarantee against hostile code.
+    """
+    modules = {'os', 'subprocess', 'socket', 'urllib', 'requests'}
+    names = modules | {'eval', 'exec', '__import__'}
+    aliases = set(names)
+    operations = Counter()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for name in node.names:
+                if name.name.split('.')[0] in modules:
+                    aliases.add(name.asname or name.name.split('.')[0])
+                    operations[ast.dump(node)] += 1
+        elif isinstance(node, ast.ImportFrom) and (node.module or '').split('.')[0] in modules:
+            aliases.update(name.asname or name.name for name in node.names)
+            operations[ast.dump(node)] += 1
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and any(
+                isinstance(part, ast.Name) and part.id in aliases
+                or isinstance(part, ast.Attribute) and part.attr in names
+                for part in ast.walk(node)):
+            operations[ast.dump(node)] += 1
+    return operations
+
+
 def validate_repair(answer, current_source):
     if not isinstance(answer, dict) or not isinstance(answer.get('app_source'), str):
         raise RejectedRepair('Builder response must contain app_source text')
@@ -465,8 +495,11 @@ def validate_repair(answer, current_source):
     def routes(tree):
         return sorted(ast.dump(d) for n in ast.walk(tree)
                       if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) for d in n.decorator_list)
-    if routes(ast.parse(current_source)) != routes(candidate):
+    current = ast.parse(current_source)
+    if routes(current) != routes(candidate):
         raise RejectedRepair('Builder changed protected route declarations')
+    if restricted_operations(candidate) - restricted_operations(current):
+        raise RejectedRepair('Builder added or changed a restricted import or call')
     return source
 
 def battle_exit_code(state):
@@ -612,7 +645,8 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3, c
                 event(database, battle, 'builder_rejected', f'Attempt {attempt} proposed an invalid repair; original candidate was not applied.')
                 continue
             (workspace / 'app.py').write_text(source, encoding='utf-8')
-            tests = command([python, '-m', 'unittest', 'discover', '-v'], workspace, timeout=120)
+            tests = command([python, '-m', 'unittest', 'discover', '-v'], workspace, timeout=120,
+                            environment='app')
             test_failure = tests.stdout + tests.stderr
             (private / f'builder-{attempt}' / 'unit-tests.log').write_text(test_failure, encoding='utf-8')
             check_protected(workspace, manifest, allow_app=True)
