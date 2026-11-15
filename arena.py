@@ -5,6 +5,7 @@ from contextlib import closing
 from pathlib import Path
 from flask import render_template, request
 from datetime import datetime, timedelta, timezone
+from battle_history import decorate, summarize
 
 STATE_LABELS = {
     'prepared': 'Battle prepared', 'verifying': 'Kane is checking',
@@ -58,18 +59,21 @@ def register_arena(app):
             if not connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='arena_sessions'").fetchone():
                 return []
             sessions = []
+            has_details = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='arena_drill_details'").fetchone()
             for row in connection.execute("SELECT * FROM arena_sessions ORDER BY created DESC LIMIT 10"):
                 item = dict(row)
                 item["events"] = connection.execute("SELECT at,kind,message FROM arena_events WHERE battle_id=? ORDER BY seq", (row["id"],)).fetchall()
                 item["verifications"] = connection.execute("SELECT phase,attempt,result,evidence_id,pack_hash,test_hash,duration FROM arena_verifications WHERE battle_id=? ORDER BY rowid", (row["id"],)).fetchall()
-                sessions.append(item)
+                detail = connection.execute('SELECT * FROM arena_drill_details WHERE battle_id=?', (row['id'],)).fetchone() if has_details else None
+                sessions.append(decorate(item, dict(detail) if detail else None))
             return sessions
 
     @app.get("/arena/live")
     def arena_live():
         sessions = live_battles()
         selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
-        response = app.make_response(render_template("live_battles.html", sessions=sessions, selected_id=selected))
+        response = app.make_response(render_template("live_battles.html", sessions=sessions, selected_id=selected,
+                                                     scores=summarize(sessions)))
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -88,4 +92,5 @@ def register_arena(app):
             evidence[run["phase"]] = {key: availability(source.get(key)) for key in ("report", "pack")}
         sessions = live_battles()
         selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
-        return render_template("arena.html", battle=battle, runs=runs, evidence=evidence, sessions=sessions, selected_id=selected)
+        return render_template("arena.html", battle=battle, runs=runs, evidence=evidence, sessions=sessions,
+                               selected_id=selected, scores=summarize(sessions))

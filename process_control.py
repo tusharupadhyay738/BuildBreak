@@ -105,10 +105,16 @@ def communicate(process, timeout, input_text=None):
         raise subprocess.TimeoutExpired(process.args, timeout, output=output, stderr=errors) from original
 
 
+def child_environment():
+    """Breaker credentials must not reach the app, tests, Kane or Builder."""
+    return {key: value for key, value in os.environ.items()
+            if key.upper() not in {'GEMINI_API_KEY', 'GOOGLE_API_KEY'}}
+
+
 def run(args, cwd, timeout=60, input_text=None, stderr=None):
     process = spawn(args, cwd=cwd, stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE if stderr is None else stderr,
-                    text=True, encoding='utf-8', errors='replace')
+                    text=True, encoding='utf-8', errors='replace', env=child_environment())
     try:
         output, errors = communicate(process, timeout, input_text)
         return subprocess.CompletedProcess(args, process.returncode, output, errors)

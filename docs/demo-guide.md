@@ -9,6 +9,12 @@ label cuts or time compression. Do not imply a prerecorded battle is live.
 
 - Choose a genuine completed automatic battle in Arena, not a unit-test fixture
   or an earlier interrupted run. Check all three execution references.
+- This spoken draft matches the live Gemini discount drill
+  `20261114T181556-024e132e`, documented in `gemini-first-battle.md`. A cached
+  replay must be labeled as cached; do not present it as live Gemini generation.
+- Before recording submission footage, confirm the public repository contains
+  the reviewed implementation being shown. Local uncommitted work is not yet
+  available for judges to reproduce.
 - Open its failed and passing sealed evidence packs privately using Kane's
   evidence viewer. Keep the serving process running so the links remain usable.
 - Use fictional checkout data. Hide account identifiers, cookies, terminal
@@ -46,11 +52,11 @@ Show: the broken-application result, then its genuine browser evidence.
 
 Say:
 
-"In this controlled challenge, the cart remains correct, but the saved order
-does not. Kane reaches confirmation and finds $44.97 instead of $40.47.
-That is a real failed assertion, not a simulated dashboard status. The
-baseline and failed execution have separate evidence references. A browser
-or test-automation error is kept separate from a confirmed application defect."
+"Gemini proposed changing SAVE10 to fifteen percent off. Arena validated the
+small patch in a separate copy. Kane caught a $6.75 discount instead of $4.50
+and stopped before checkout. Separately, Arena's direct check confirmed a
+wrong saved total of $38.22. These are distinct evidence sources. A browser
+or infrastructure failure does not count as a caught application defect."
 
 ## 1:25–2:05 | Explain the feedback loop
 
@@ -83,11 +89,11 @@ Show: README runner command and the method-and-limitations panel.
 
 Say:
 
-"A judge can reproduce a new battle from the public repository using their
-own logins. This version uses two controlled faults and separate Codex
-sessions; it does not discover arbitrary vulnerabilities. Context separation
-is not a security boundary, and one passing scenario is not full-app proof.
-What we demonstrate is a repeatable, evidence-driven repair loop."
+"Developers can evaluate their testing and repair workflow before shipping.
+Arena supports validated Gemini faults, cached replay and controlled fallbacks.
+Judges need their own logins; cached replay needs no Gemini call. This supports
+one checkout scenario, not arbitrary websites or vulnerability discovery.
+Context separation is a guardrail, and one passing drill is not full-app proof."
 
 ## Questions to practise
 
@@ -99,9 +105,9 @@ the browser behavior. Kane's test-healing capability is a separate concept;
 adaptive healing is disabled in these battles.
 
 **Is this fully autonomous?** A person launches the local command. After that,
-the Codex-role runner can coordinate fault selection, detection, repair and
+the runner can coordinate generation or controlled selection, detection, repair and
 verification without manual message-passing. It can stop for errors or human
-review, and its controlled-fault scope is explicit.
+review, and its supported mutation scope is explicit.
 
 **Can the agents cheat by changing the tests?** The runner checks protected-file
 hashes and does not apply test edits from the Builder. This is a practical

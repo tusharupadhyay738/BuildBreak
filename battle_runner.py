@@ -17,9 +17,15 @@ import urllib.request
 import uuid
 import zipfile
 from contextlib import contextmanager
-from process_control import run as owned_run, spawn as owned_spawn, stop_tree
+from process_control import run as owned_run, spawn as owned_spawn, stop_tree, child_environment
+from gemini_breaker import configuration as gemini_configuration, propose_fault, GeminiError
+from fault_validator import (InvalidFault, validate_fault, direct_check, json_command,
+                             TEST_SCRIPT, protected as validate_protected)
+from fault_cache import load_fault
+from battle_history import DETAIL_SCHEMA, save_details, update_outcome
 
 ROOT = Path(__file__).resolve().parent
+KANE_SESSION_ROOT = Path.home() / '.testmuai/kaneai/sessions'
 TEST = Path('.testmuai/tests/CheckoutConsistency_test.md')
 MAX_ATTEMPTS = 3
 SCHEMA = """
@@ -46,7 +52,7 @@ def digest(path):
 def connect(database):
     Path(database).parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(database, timeout=20)
-    connection.executescript(SCHEMA)
+    connection.executescript(SCHEMA + DETAIL_SCHEMA)
     try:
         with connection:
             yield connection
@@ -59,11 +65,25 @@ def event(database, battle, kind, message, state=None):
                    (battle, now(), kind, message))
         if state:
             db.execute('UPDATE arena_sessions SET state=? WHERE id=?', (state, battle))
+            update_outcome(db, battle, state)
     print(f'[{kind}] {message}', flush=True)
 
 def executable(name):
     found = shutil.which(name + '.cmd') if os.name == 'nt' else None
     found = found or shutil.which(name)
+    if not found:
+        # Desktop-bundled CLIs may be visible to Codex but absent from an older
+        # VS Code terminal's PATH. Keep machine-specific paths out of source.
+        settings = ROOT / 'instance/cli-paths.json'
+        if settings.is_file():
+            try:
+                configured = json.loads(settings.read_text(encoding='utf-8')).get(name)
+            except (ValueError, AttributeError):
+                raise RuntimeError('Invalid local instance/cli-paths.json; expected a JSON object') from None
+            if configured is not None:
+                if not isinstance(configured, str) or not Path(configured).is_absolute() or not Path(configured).is_file():
+                    raise RuntimeError(f'Configured {name} path is missing; update instance/cli-paths.json')
+                found = configured
     if not found:
         raise RuntimeError(f'{name} is not installed or available on PATH')
     return found
@@ -74,7 +94,7 @@ def command(args, cwd, timeout=60, input_text=None):
 def snapshot(source, destination):
     """Explicit allowlist: never copy credentials, evidence, databases or history."""
     files = ['app.py', 'arena.py', 'test_app.py', 'test_arena.py',
-             'import_battle.py', 'requirements.txt', TEST.as_posix()]
+             'import_battle.py', 'battle_history.py', 'requirements.txt', TEST.as_posix()]
     for folder in ('templates', 'static'):
         files += [p.relative_to(source).as_posix() for p in (source / folder).rglob('*') if p.is_file()]
     for name in files:
@@ -119,7 +139,8 @@ class Server:
         launcher = ('import sys; from app import create_app; '
                     'create_app({"DATABASE":sys.argv[1]}).run(host="127.0.0.1",port=int(sys.argv[2]))')
         self.process = owned_spawn([self.python, '-c', launcher, str(self.database), str(self.port)],
-                                        cwd=self.workspace, stdout=self.logs[0], stderr=self.logs[1])
+                                        cwd=self.workspace, stdout=self.logs[0], stderr=self.logs[1],
+                                        env=child_environment())
         for _ in range(60):
             if self.process.poll() is not None:
                 self.stop()
@@ -225,6 +246,39 @@ def failure_handoff(events, pack):
                         notes.append(f'Observed {key}: {value}')
     return '\n'.join(notes)[-12000:]
 
+def canonical_uuid(value):
+    try:
+        return isinstance(value, str) and str(uuid.UUID(value)) == value
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def find_evidence_pack(events, workspace):
+    """Use only reported artifacts inside known Kane storage; never arbitrary paths."""
+    for record in reversed(events):
+        evidence = record.get('evidence_id')
+        if record.get('type') == 'test_md_evidence_ingest' and record.get('status') == 'ok' and canonical_uuid(evidence):
+            pack = workspace / '.testmuai/evidence' / (evidence + '.evidence')
+            if pack.is_file() and not pack.is_symlink() and pack.resolve().is_relative_to(workspace.resolve()):
+                return evidence, pack, 'workspace_ingest'
+    done = next((record for record in reversed(events) if record.get('type') == 'test_md_done'), {})
+    session = done.get('session_id')
+    if not canonical_uuid(session):
+        return None, None, None
+    for record in reversed(events):
+        if record.get('type') != 'coverage' or not isinstance(record.get('pack'), str):
+            continue
+        pack = Path(record['pack'])
+        evidence = pack.stem
+        if not pack.is_absolute() or pack.suffix != '.evidence' or not canonical_uuid(evidence):
+            continue
+        expected = KANE_SESSION_ROOT / session / 'evidence' / (evidence + '.evidence')
+        if (pack == expected and pack.is_file() and not pack.is_symlink()
+                and pack.resolve().is_relative_to(KANE_SESSION_ROOT.resolve())):
+            return evidence, pack, 'kane_local_session'
+    return None, None, None
+
+
 def run_kane(workspace, artifacts, url, name, kane, timeout=1200):
     artifacts.mkdir(parents=True, exist_ok=False)
     test_hash = digest(workspace / TEST)
@@ -253,16 +307,13 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200):
     if digest(workspace / TEST) != test_hash:
         raise ValueError('Kane test definition changed during execution')
     result = 'infrastructure_error' if timed_out else classify_kane(events, exit_code)
-    evidence = next((e.get('evidence_id') for e in reversed(events)
-                     if e.get('type') == 'test_md_evidence_ingest' and e.get('status') == 'ok'), None)
+    evidence, pack, evidence_source = find_evidence_pack(events, workspace)
     pack_hash = None
-    if evidence and str(uuid.UUID(evidence)) == evidence:
-        pack = workspace / '.testmuai/evidence' / (evidence + '.evidence')
-        if pack.is_file():
-            shutil.copyfile(pack, artifacts / 'run.evidence')
-            pack_hash = digest(artifacts / 'run.evidence')
-            if pack_hash != digest(pack):
-                raise ValueError('Evidence copy differs from source')
+    if pack:
+        shutil.copyfile(pack, artifacts / 'run.evidence')
+        pack_hash = digest(artifacts / 'run.evidence')
+        if pack_hash != digest(pack):
+            raise ValueError('Evidence copy differs from source')
     generated = workspace / '.testmuai/tests/output-CheckoutConsistency'
     summaries = [e for e in events if e.get('type') == 'test_md_summary']
     replaced = bool(summaries and summaries[-1].get('artifacts', {}).get('replaced'))
@@ -270,6 +321,12 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200):
         shutil.copytree(generated, artifacts / ('output' if replaced else 'cached-authoring-output'))
     (artifacts / 'artifact-provenance.json').write_text(json.dumps({
         'authoring_output_refreshed': replaced,
+        'evidence_source': evidence_source,
+        'process_exit_code': exit_code,
+        'timed_out': timed_out,
+        'workspace_ingest_succeeded': any(e.get('type') == 'test_md_evidence_ingest'
+                                      and e.get('status') == 'ok' and e.get('evidence_id') == evidence for e in events),
+        'cloud_upload_succeeded': summaries[-1].get('upload', {}).get('succeeded') if summaries else None,
         'authoritative_sources': ['events.ndjson', 'run.evidence'],
         'note': 'Cached authoring reports are not a report of this replay.' if not replaced else 'Authoring output refreshed by Kane.'
     }, indent=2), encoding='utf-8')
@@ -335,6 +392,43 @@ def apply_fault(workspace, choice):
     app.write_text(source.replace(old, new, 1), encoding='utf-8')
     ast.parse(app.read_text(encoding='utf-8'))
 
+
+def select_gemini_fault(workspace, private, python, manifest, notify):
+    """Three bounded proposals, then an explicitly attributed validated fallback."""
+    source = (workspace / 'app.py').read_text(encoding='utf-8')
+    feedback = ''
+    attempts = []
+    for attempt in range(1, 4):
+        try:
+            proposal = propose_fault(source, feedback)
+            candidate = validate_fault(workspace, private / f'fault-validation-{attempt}',
+                                       python, manifest, proposal, Server)
+            selection = {'producer': 'gemini', 'fallback': False, 'patch': proposal,
+                         'attempt': attempt, 'rejected_attempts': attempts,
+                         'model': os.environ.get('GEMINI_MODEL')}
+            return selection, candidate
+        except (GeminiError, InvalidFault) as error:
+            feedback = str(error)
+            attempts.append({'attempt': attempt,
+                             'kind': 'api_error' if isinstance(error, GeminiError) else 'invalid_fault',
+                             'reason': feedback,
+                             **({'api_kind': error.kind, 'http_status': error.status,
+                                 'retryable': error.retryable} if isinstance(error, GeminiError) else {})})
+            notify('fault_rejected', f'Gemini proposal {attempt} was not accepted '
+                   f'({attempts[-1]["kind"]}); isolated candidate discarded.')
+            if isinstance(error, GeminiError):
+                if not error.retryable:
+                    break
+                if attempt < 3:
+                    time.sleep(2 ** attempt)
+    old, new = FAULTS['order-total']
+    proposal = {'file': 'app.py', 'old_text': old, 'new_text': new,
+                'description': 'Controlled saved-order total fallback after Gemini attempts.'}
+    candidate = validate_fault(workspace, private / 'fault-validation-fallback',
+                               python, manifest, proposal, Server)
+    return {'producer': 'controlled-fallback', 'fallback': True, 'patch': proposal,
+            'rejected_attempts': attempts}, candidate
+
 def builder_patch(codex, workspace, artifacts, failure, previous_test_failure=''):
     schema = {'type': 'object', 'properties': {
         'explanation': {'type': 'string'}, 'app_source': {'type': 'string'}},
@@ -384,9 +478,16 @@ def battle_exit_code(state):
         return 1
     return 3
 
-def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3):
+def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3, cached_fault=None):
     if not 1 <= max_attempts <= MAX_ATTEMPTS:
         raise ValueError('Repair attempts must be between 1 and 3')
+    if breaker not in {'scripted', 'codex', 'gemini', 'cached'} or builder not in {'human', 'codex'}:
+        raise ValueError('Unknown Breaker or Builder mode')
+    if (breaker == 'cached') != bool(cached_fault):
+        raise ValueError('Use --breaker cached together with --cached-fault <file>.')
+    if breaker == 'gemini':
+        # Stop before using Kane credits if local API/free-tier setup is missing.
+        gemini_configuration()
     root = Path(root).resolve()
     if not root.is_dir():
         raise ValueError('Missing project root')
@@ -398,6 +499,7 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3):
     workspace = private / 'workspace'
     workspace.mkdir()
     manifest = snapshot(root, workspace)
+    cached_record = load_fault(cached_fault, workspace, manifest) if breaker == 'cached' else None
     (private / 'baseline-manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     # Hidden baseline artifacts are outside Builder's provided workspace/context.
     shutil.copyfile(root / 'app.py', private / 'original-app.py')
@@ -407,6 +509,7 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3):
     with connect(database) as db:
         db.execute('INSERT INTO arena_sessions VALUES (?,?,?,?,?,0)',
                    (battle, now(), 'prepared', baseline, f'{breaker} Breaker / {builder} Builder'))
+        save_details(db, battle, requested=breaker, max_attempts=max_attempts)
     event(database, battle, 'prepared', 'Isolated source snapshot and private database prepared.', 'prepared')
     python = str(root / '.venv/Scripts/python.exe') if os.name == 'nt' else sys.executable
     if not Path(python).is_file():
@@ -422,21 +525,67 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3):
         event(database, battle, 'kane_finished', f'Kane {phase}: {result["result"]}.')
         return result
     try:
+        if breaker in {'gemini', 'cached'}:
+            baseline_checks = private / 'healthy-checks'
+            baseline_checks.mkdir()
+            tests = json_command(python, TEST_SCRIPT, workspace, baseline_checks, 'app-tests')
+            if (tests['run'] < 1 or any(tests[key] for key in
+                    ('failures', 'errors', 'skipped', 'expected_failures', 'unexpected_successes'))):
+                event(database, battle, 'stopped', 'Healthy application tests did not all pass; no mutation proposed.', 'baseline_blocked')
+                return battle
+            observation = direct_check(workspace, baseline_checks / 'direct', python)
+            if not observation['passed']:
+                event(database, battle, 'stopped', 'Healthy direct checkout invariant failed; no mutation proposed.', 'baseline_blocked')
+                return battle
+            validate_protected(workspace, manifest)
+            event(database, battle, 'direct_baseline_passed', 'Independent healthy checkout check passed: saved amounts 4497 / 450 / 4047 cents.')
         server.start()
         result = verify('baseline', 0)
         if result['result'] != 'passed':
             event(database, battle, 'stopped', 'Baseline did not pass; no fault was introduced.', 'baseline_blocked')
             return battle
         server.stop()
-        selection = choose_fault(codex, workspace, private / 'breaker') if breaker == 'codex' else {'fault': 'order-total', 'reason': 'Operator-selected controlled saved-total regression.'}
+        if breaker == 'gemini':
+            selection, candidate = select_gemini_fault(
+                workspace, private, python, manifest,
+                lambda kind, message: event(database, battle, kind, message))
+            selection['source'] = 'controlled' if selection['fallback'] else 'live'
+        elif breaker == 'cached':
+            candidate = validate_fault(workspace, private / 'fault-validation-cached',
+                                       python, manifest, cached_record['patch'], Server)
+            selection = {'producer': 'gemini', 'source': 'cached', 'fallback': False,
+                         'patch': cached_record['patch'], 'model': cached_record['model'],
+                         'cache_id': cached_record['id'], 'origin_battle': cached_record['origin_battle']}
+        else:
+            selection = choose_fault(codex, workspace, private / 'breaker') if breaker == 'codex' else {'fault': 'order-total', 'reason': 'Operator-selected controlled saved-total regression.'}
         (private / 'fault.json').write_text(json.dumps(selection), encoding='utf-8')
         check_protected(workspace, manifest)
-        apply_fault(workspace, selection['fault'])
-        event(database, battle, 'fault_seeded', 'Controlled fault applied. Selection and patch are private.', 'fault_seeded')
+        if breaker in {'gemini', 'cached'}:
+            (workspace / 'app.py').write_text(candidate, encoding='utf-8')
+            validate_protected(workspace, manifest, allow_app=True)
+            with connect(database) as db:
+                db.execute('UPDATE arena_sessions SET mode=? WHERE id=?',
+                           (selection['producer'] + (' (cached)' if breaker == 'cached' else '') +
+                            ' Breaker / ' + builder + ' Builder', battle))
+                save_details(db, battle, requested=breaker, producer=selection['producer'],
+                             source=selection['source'], model=selection.get('model'),
+                             cache_id=selection.get('cache_id'), validated=True)
+            event(database, battle, 'fault_seeded',
+                  ('Cached Gemini fault' if breaker == 'cached' else
+                   'Gemini-generated fault' if not selection['fallback'] else 'Controlled fallback fault') +
+                  ' applied after independent validation. Patch and description are private.', 'fault_seeded')
+        else:
+            apply_fault(workspace, selection['fault'])
+            with connect(database) as db:
+                save_details(db, battle, requested=breaker, producer=breaker, source='controlled')
+            event(database, battle, 'fault_seeded', 'Controlled fault applied. Selection and patch are private.', 'fault_seeded')
         server.start()
         result = verify('before', 0)
         if result['result'] != 'verification_failed':
-            event(database, battle, 'stopped', 'No confirmed failing assertion; repair was not started.', 'not_detected' if result['result'] == 'passed' else 'infrastructure_error')
+            message = ('Independently validated fault escaped the selected Kane checks; no repair attempted.'
+                       if breaker in {'gemini', 'cached'} and result['result'] == 'passed'
+                       else 'No confirmed failing assertion; repair was not started.')
+            event(database, battle, 'stopped', message, 'not_detected' if result['result'] == 'passed' else 'infrastructure_error')
             return battle
         handoff = ('Repair only workspace/app.py using the requirements in the frozen checkout test. '
                    'Do not inspect fault.json, original-app.py, or other projects. '
@@ -470,6 +619,20 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3):
             if tests.returncode:
                 event(database, battle, 'unit_tests_failed', f'Attempt {attempt} failed automated tests; no verified repair claimed.')
                 continue
+            if breaker in {'gemini', 'cached'}:
+                try:
+                    observation = direct_check(workspace, private / f'repair-direct-{attempt}', python)
+                except InvalidFault:
+                    test_failure = 'Independent checkout check could not complete; repair is unverified.'
+                    event(database, battle, 'direct_check_failed', f'Attempt {attempt} could not complete the direct checkout check.')
+                    continue
+                check_protected(workspace, manifest, allow_app=True)
+                if not observation['passed']:
+                    test_failure = ('Saved checkout amounts must be 4497, 450, 4047 cents; observed ' +
+                                    str(observation['actual_cents']))
+                    event(database, battle, 'direct_check_failed', f'Attempt {attempt} did not restore the independent checkout invariant.')
+                    continue
+                event(database, battle, 'direct_check_passed', f'Attempt {attempt} restored the independent checkout invariant; Kane still pending.')
             event(database, battle, 'unit_tests_passed', f'Attempt {attempt} passed automated tests; Kane verification pending.')
             server.start()
             result = verify('after', attempt)
@@ -490,12 +653,14 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--breaker', choices=['scripted', 'codex'], default='scripted')
+    parser.add_argument('--breaker', choices=['scripted', 'codex', 'gemini', 'cached'], default='scripted')
+    parser.add_argument('--cached-fault', type=Path, help='Validated Gemini cache JSON; requires --breaker cached')
     parser.add_argument('--builder', choices=['human', 'codex'], default='human')
     parser.add_argument('--max-attempts', type=int, choices=range(1, 4), default=3)
     args = parser.parse_args()
     try:
-        battle = run_battle(breaker=args.breaker, builder=args.builder, max_attempts=args.max_attempts)
+        battle = run_battle(breaker=args.breaker, builder=args.builder, max_attempts=args.max_attempts,
+                            cached_fault=args.cached_fault)
         print('Battle record: ' + battle)
         with connect(ROOT / 'instance/arena.sqlite3') as db:
             row = db.execute('SELECT state FROM arena_sessions WHERE id=?', (battle,)).fetchone()

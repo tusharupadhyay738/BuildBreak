@@ -88,10 +88,21 @@ run creates them. Existing historical first-battle imports still work.
 
 ## Honest limits
 
+Kane may finish successfully while a cloud upload fails. The runner can archive
+either an ingested workspace pack or the local session pack explicitly reported
+in Kane's event stream. Session packs must live under the known Kane sessions
+directory and match the final session UUID. Arbitrary reported paths are rejected.
+All accepted packs still require matching sealed run identity, test hash, target,
+verdict, final events and process result. Provenance records the source, CLI exit,
+timeout state and actual cloud upload status; local acceptance does not claim a
+cloud upload succeeded. Interrupted runs recorded before this support was added
+remain unchanged.
+
 Folder/context separation reduces accidental answer leakage; it is not a
 confidential sandbox against a model deliberately searching other readable
-paths. Faults come from a small library. The Builder is a separate Codex
-session, not a different model vendor. The generated repair is constrained by
+paths. The scripted/Codex Breakers use a small fault library; the optional Gemini
+mode generates bounded mutations under validation (see `gemini-breaker.md`).
+The Builder is a fresh Codex session. The generated repair is constrained by
 tests and route checks, not a formal proof of source-code safety. No agent's
 claim is accepted as a Kane pass. Historical bad orders are not silently
 rewritten. This runner uses local Flask development servers and fictional

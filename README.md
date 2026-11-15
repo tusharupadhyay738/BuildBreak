@@ -1,4 +1,4 @@
-# BreakShop
+# BuildBreak Arena
 
 BuildBreak Arena now includes a local replayable battle runner. See
 [the runner guide](docs/replayable-battles.md) for setup, its protected test
@@ -20,6 +20,92 @@ It uses separate Codex contexts for controlled fault selection and repair,
 and real Kane browser runs. It does not assume an API key or ship credentials.
 It operates on an explicit snapshot of the current working tree and keeps the
 main app unchanged. A maximum of three repair attempts is enforced.
+
+## Optional Gemini Breaker and validated cache
+
+BuildBreak Arena is the battle runner; BreakShop is its supported demonstration
+application. The optional Gemini mode adds **LLM-generated fault injection under
+validation**. It does not predict production incidents or discover arbitrary
+vulnerabilities. The original `scripted` and `codex` controlled-fault modes remain
+available as the demonstration fallback.
+
+Read [Gemini setup and validation](docs/gemini-breaker.md) before using:
+
+```powershell
+.\.venv\Scripts\python.exe battle_runner.py --breaker gemini --builder codex --max-attempts 3
+```
+
+This mode requires a locally configured `GEMINI_API_KEY`, an explicitly selected
+`GEMINI_MODEL`, and confirmation that its project has billing disabled and the
+model has free-tier access. Arena cannot verify billing status from an API key.
+No paid model fallback is configured. Kane and Codex retain their own account
+usage requirements.
+
+The healthy app must pass its application tests, an independent saved-order
+check, and the existing approved Kane checkout test. Each generated patch is
+limited to pricing arithmetic or saved amount variables in `app.py`. A candidate
+is validated in a disposable copy: protected hashes must match, HTTP startup
+must work, some app tests must pass and some assertions must fail without test
+errors, and the direct checkout check must fail. At most three proposals are
+requested before a separately validated controlled fallback. The private record
+and existing battle mode field identify which producer actually supplied the
+accepted fault.
+
+The direct check uses a fresh database and fixed expectations of 4497 / 450 /
+4047 cents for two shirts, one sticker pack, and SAVE10. It reads persisted
+order amounts instead of trusting browser text or the app's pricing function.
+Only faults demonstrated by this checkout invariant are accepted. This deliberately
+limits scope; it does not measure general website coverage.
+
+Codex receives broken source and Kane failure evidence, without the fault patch,
+description or healthy source in its supplied context. A repair must pass the
+automated tests, direct check and unchanged Kane test. A validated fault passing
+Kane is recorded as `not_detected` with an explicit escape event; infrastructure
+failures do not count as escapes or detections. Arena records the actual producer,
+live/cached/controlled source, model, cache identity and classified outcome.
+
+Local/offline tests cover the API contract, validator and runner branches. Their
+mocked Gemini/Kane/Codex responses are test fixtures, not live battle evidence.
+A genuine Gemini-to-Kane-to-Codex battle completed on November 14, 2026 using
+`gemini-3.5-flash-lite`, with no fallback and one repair attempt. Kane detected
+the generated 15% discount; the independent check confirmed a $38.22 saved total
+instead of $40.47. See [the genuine run account](docs/gemini-first-battle.md).
+This verifies one checkout drill, not general fault discovery.
+
+Generate up to three proposals using your own configured free-tier Gemini key;
+only validated patches are kept under ignored `instance/fault-cache/`:
+
+```powershell
+.\.venv\Scripts\python.exe cache_faults.py --count 3
+```
+
+Replay one printed cache filename without a Gemini API key or live Gemini call:
+
+```powershell
+.\.venv\Scripts\python.exe battle_runner.py --breaker cached --cached-fault "instance/fault-cache/CACHE_ID.json" --builder codex --max-attempts 3
+```
+
+Replay still needs authenticated Kane/Codex and uses their allowances. Cache
+records are tied to the app and protected test hashes and undergo full mutation
+validation again. They are local, unsigned provenance records, not a trusted code
+distribution format. A fresh checkout has no private caches, evidence or history.
+
+A real cached replay completed on November 15, 2026 with a caught fault and
+first-attempt verified repair, without a Gemini call during replay. See
+[the cached replay record](docs/cached-replay.md). This replay reused the earlier
+generated fault; it is another execution, not another independently generated bug.
+
+The dashboard labels caught-and-repaired, caught-needing-human-review and confirmed
+escapes. Its counts cover only independently validated scored executions among
+the ten displayed recent records. Interrupted, unfinished and unvalidated records
+are excluded. Repeated cached faults are executions, not additional distinct bug
+types. Counts are measurements for these drills, not a website quality score.
+To enrich supported older records without rewriting their verdicts, explicitly
+run `.\.venv\Scripts\python.exe import_drill_history.py`; missing/inconsistent artifacts remain unclassified.
+
+Automatic flow mapping, test drafting/approval, new suite versions, arbitrary-app
+support and automatic public posting are not implemented. The current approved
+Kane checkout test remains unchanged.
 
 The stronger checkout baseline and the manually orchestrated second battle
 are documented in [checkout consistency](docs/checkout-consistency.md).
