@@ -100,7 +100,7 @@ class FaultCacheTests(unittest.TestCase):
         invalid = {**proposal(), 'file': 'test_app.py'}
         with patch('cache_faults.configuration', return_value=('fixture', 'gemini-fixture')), \
                 patch('cache_faults.propose_fault', side_effect=[proposal(), invalid, proposal()]) as provider, \
-                patch('cache_faults.time.sleep'):
+                patch('cache_faults.time', new=SimpleNamespace(sleep=lambda seconds: None)):
             results = cache_faults(self.workspace, sys.executable, count=3)
         self.assertEqual(provider.call_count, 3)
         self.assertEqual([row['accepted'] for row in results], [True, False, True])
