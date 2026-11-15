@@ -1,0 +1,40 @@
+{
+  "capture_date": "2026-11-15",
+  "battle": "20261115T051420-5ba874b2",
+  "context": "Existing genuine cached replay; no new battle or Kane dashboard test was run.",
+  "images": [
+    {
+      "file": "arena-dashboard.png",
+      "sha256": "4ec2693f1aa2d805d1b19097a50af90ccda6a193203dfeb603b64b73104a79b7",
+      "kind": "current dashboard capture of genuine recorded history"
+    },
+    {
+      "file": "arena-evidence.png",
+      "sha256": "07218e07f09c9fe472cb0abac6ae659ed78a2516c1e4e6f467a98389ce078c20",
+      "kind": "current dashboard capture of genuine recorded history"
+    },
+    {
+      "file": "arena-banner.svg",
+      "sha256": "678301fd9eb2907d8c9b318026a4e0a70484cd298389966adaf0db0c68405782",
+      "kind": "branding"
+    },
+    {
+      "file": "kane-failure.jpg",
+      "kind": "unmodified Kane screenshot",
+      "sha256": "5206f1982fa2c816a05d3f616d40c0de5dd5816b10fa5f2b371dda1cf8cefc60",
+      "execution": "3bb786e9-4dce-4cfe-a473-603b6502714d",
+      "source_pack_sha256": "335dd266e606866a1ad0aa0ef49d4bcddd31cd90febc669f0a34c07021cc42ae",
+      "test_sha256": "cba82a4a759f3bca8a2e79196d39107b061a87aed89465b4c9cae16dbe4521f7",
+      "captured_action": 29
+    },
+    {
+      "file": "kane-repaired.jpg",
+      "kind": "unmodified Kane screenshot",
+      "sha256": "d0ab6ef43d32d4e624197066da438a3c1cd870c614790ab287413651338554b8",
+      "execution": "a60b4704-7ca6-445e-9b4f-a2b92d0af544",
+      "source_pack_sha256": "0c2ce9fcd5b6f61a18034334c12d2aa21db0a569b0d5191095878ced01d84d0b",
+      "test_sha256": "cba82a4a759f3bca8a2e79196d39107b061a87aed89465b4c9cae16dbe4521f7",
+      "captured_action": 50
+    }
+  ]
+}
