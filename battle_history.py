@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS arena_drill_details (
  battle_id TEXT PRIMARY KEY, requested_breaker TEXT NOT NULL,
  producer TEXT, source TEXT, model TEXT, cache_id TEXT,
  independently_validated INTEGER NOT NULL DEFAULT 0,
- outcome TEXT, max_attempts INTEGER);
+ outcome TEXT, max_attempts INTEGER, family TEXT, invariant TEXT);
 """
 
 OUTCOME_LABELS = {
@@ -17,6 +17,14 @@ PRODUCER_LABELS = {
     'gemini': 'Gemini', 'controlled-fallback': 'Controlled fallback',
     'codex': 'Codex (controlled selection)', 'scripted': 'Scripted (controlled fault)',
 }
+
+
+def ensure_details_schema(connection):
+    connection.execute(DETAIL_SCHEMA)
+    columns = {row[1] for row in connection.execute('PRAGMA table_info(arena_drill_details)')}
+    for name in ('family', 'invariant'):
+        if name not in columns:
+            connection.execute('ALTER TABLE arena_drill_details ADD COLUMN ' + name + ' TEXT')
 
 
 def outcome_for(state, verifications, independently_validated):
@@ -34,14 +42,16 @@ def outcome_for(state, verifications, independently_validated):
 
 
 def save_details(connection, battle, *, requested, producer=None, source=None,
-                 model=None, cache_id=None, validated=False, max_attempts=None):
-    connection.execute(DETAIL_SCHEMA)
+                 model=None, cache_id=None, validated=False, max_attempts=None,
+                 family=None, invariant=None):
+    ensure_details_schema(connection)
     connection.execute('''INSERT INTO arena_drill_details
-        (battle_id,requested_breaker,producer,source,model,cache_id,independently_validated,max_attempts)
-        VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(battle_id) DO UPDATE SET
+        (battle_id,requested_breaker,producer,source,model,cache_id,independently_validated,max_attempts,family,invariant)
+        VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(battle_id) DO UPDATE SET
         producer=excluded.producer,source=excluded.source,model=excluded.model,
-        cache_id=excluded.cache_id,independently_validated=excluded.independently_validated''',
-        (battle, requested, producer, source, model, cache_id, int(validated), max_attempts))
+        cache_id=excluded.cache_id,independently_validated=excluded.independently_validated,
+        family=excluded.family,invariant=excluded.invariant''',
+        (battle, requested, producer, source, model, cache_id, int(validated), max_attempts, family, invariant))
 
 
 def update_outcome(connection, battle, state):
@@ -64,6 +74,7 @@ def decorate(item, detail):
                           'independently_validated', 'outcome', 'max_attempts')}
         item['drill']['producer_label'] = PRODUCER_LABELS.get(detail['producer'], 'Not recorded')
         item['drill']['outcome_label'] = OUTCOME_LABELS.get(detail['outcome'], 'Not scored')
+        item['drill'].update(family=detail.get('family'), invariant=detail.get('invariant'))
     return item
 
 

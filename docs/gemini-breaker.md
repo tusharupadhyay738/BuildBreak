@@ -92,17 +92,31 @@ documented in the [official API reference](https://ai.google.dev/api/generate-co
 The only accepted fields are `file`, `old_text`, `new_text`, `description`.
 Only `app.py` is allowed. The old fragment must appear exactly once. Each fragment
 is bounded to six lines and 500 characters. The parsed Python must preserve all
-structure except numeric constants/arithmetic operators in `pricing()` and the
-three saved amount variable references in the orders INSERT. Imports, new calls,
+structure except ONE of two explicit families: (1) numeric constants/arithmetic
+operators in `pricing()` and the three saved amount variable references in the
+orders INSERT; (2) only the integer upper cap in `cart()`'s `0 <= quantity <= 99`
+guard, constrained to 1 through 100. Mixed-family edits are rejected. Imports, new calls,
 routes, authentication, test and configuration changes are rejected.
 
 The runner validates each candidate before touching its working copy. It copies
 only the baseline manifest, boots a local HTTP server, runs `test_app`, and runs
 the independent checkout fixture against a new SQLite database. A valid mutation
 must produce assertion failures and genuine passing app tests with no test errors,
-plus a persisted-amount mismatch in the approved fixture. A no-op or a mutation
-outside that fixture is unproven and rejected. The healthy fixture must pass first.
+plus failure of the selected independent invariant. Pricing keeps the existing
+persisted-amount fixture unchanged. Quantity uses a separate API/session probe:
+accept 99, reject 100 without changing the cart, remove at zero. That probe must
+pass on healthy source before the candidate can be accepted. A no-op or a mutation
+outside both invariants is unproven and rejected.
 Protected file hashes are checked before and after candidate execution.
+
+Changing the cap to 100 leaves the protected two-shirt/one-sticker checkout
+scenario healthy while violating the quantity invariant. If Kane passes, the
+runner records an escape and starts no repair. This identifies a gap in that
+particular test, not a general weakness of Kane. Family and invariant are stored
+in validation metadata and battle history. Existing version-1 pricing caches
+remain supported; quantity caches use the same format and are fully revalidated.
+The new family has local probe and mocked orchestration tests; no live Gemini,
+Kane or Codex battle has verified it yet.
 
 Up to three rejected proposals/API errors trigger a controlled saved-total fallback
 (permanent API errors stop retries early),
@@ -114,8 +128,9 @@ are stripped from app, test, Kane and Codex subprocess environments.
 The Builder's supplied context contains only the broken app and genuine Kane
 failure feedback. Fault JSON and validation artifacts stay outside that context.
 Context separation is not an OS security boundary. Builder source validation
-retains the existing syntax, route, test and hash guardrails; it is not a formal
-proof that generated repair code is safe.
+retains syntax, route, test and hash guardrails and rejects added sensitive
+imports/calls. See [the local execution boundary](execution-boundary.md) for
+environment isolation and its limits. It is not a proof that repair code is safe.
 
 ## Results and limits
 

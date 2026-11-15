@@ -40,6 +40,19 @@ class HistoryTests(unittest.TestCase):
         self.assertIsNone(outcome_for('infrastructure_error', runs('verification_failed'), True))
         self.assertIsNone(outcome_for('completed', runs('infrastructure_error', 'passed'), True))
 
+    def test_family_migration_preserves_existing_detail_fields(self):
+        with closing(sqlite3.connect(self.database)) as db:
+            db.execute('''CREATE TABLE arena_drill_details (battle_id TEXT PRIMARY KEY,
+                requested_breaker TEXT NOT NULL, producer TEXT, source TEXT, model TEXT,
+                cache_id TEXT, independently_validated INTEGER NOT NULL DEFAULT 0,
+                outcome TEXT, max_attempts INTEGER)''')
+            db.execute('INSERT INTO arena_drill_details VALUES (?,?,?,?,?,?,?,?,?)',
+                       ('legacy', 'gemini', 'gemini', 'live', 'gemini-fixture', None, 1, 'escaped', 3))
+            db.commit()
+        with connect(self.database) as db:
+            row = db.execute('SELECT producer,outcome,max_attempts,family,invariant FROM arena_drill_details').fetchone()
+            self.assertEqual(row, ('gemini', 'escaped', 3, None, None))
+
     def seed(self, battle, state, producer='gemini', source='live', validated=True):
         with connect(self.database) as db:
             db.execute('INSERT INTO arena_sessions VALUES (?,?,?,?,?,?)', (battle, '2026-11-14T18:00:00+00:00', 'prepared', 'fixture', 'gemini Breaker / codex Builder', 1))

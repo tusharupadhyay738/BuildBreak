@@ -21,9 +21,9 @@ from contextlib import contextmanager
 from process_control import run as owned_run, spawn as owned_spawn, stop_tree, child_environment
 from gemini_breaker import configuration as gemini_configuration, propose_fault, GeminiError
 from fault_validator import (InvalidFault, validate_fault, direct_check, json_command,
-                             TEST_SCRIPT, protected as validate_protected)
+                             TEST_SCRIPT, protected as validate_protected, fault_family, INVARIANTS)
 from fault_cache import load_fault
-from battle_history import DETAIL_SCHEMA, save_details, update_outcome
+from battle_history import DETAIL_SCHEMA, save_details, update_outcome, ensure_details_schema
 
 ROOT = Path(__file__).resolve().parent
 KANE_SESSION_ROOT = Path.home() / '.testmuai/kaneai/sessions'
@@ -54,6 +54,7 @@ def connect(database):
     Path(database).parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(database, timeout=20)
     connection.executescript(SCHEMA + DETAIL_SCHEMA)
+    ensure_details_schema(connection)
     try:
         with connection:
             yield connection
@@ -446,6 +447,8 @@ def builder_patch(codex, workspace, artifacts, failure, previous_test_failure=''
         'read Git history, or look for fault definitions or original source. '
         'Return the complete repaired app.py in app_source and a short explanation. '
         'Preserve all routes, security checks and behavior. Do not fake or change tests. '
+        'Cart quantities must accept 1 through 99, reject 100 without changing the cart, '
+        'and remove an item at zero. '
         'Requirements: SAVE10 gives 10% off with cent half-up rounding. Two shirts '
         'at $19.99 and one sticker pack at $4.99 have subtotal $44.97, discount '
         '$4.50 and total $40.47. Cart and saved confirmation must agree after reload. '
@@ -591,6 +594,9 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3, c
                          'cache_id': cached_record['id'], 'origin_battle': cached_record['origin_battle']}
         else:
             selection = choose_fault(codex, workspace, private / 'breaker') if breaker == 'codex' else {'fault': 'order-total', 'reason': 'Operator-selected controlled saved-total regression.'}
+        family = fault_family(workspace, selection['patch']) if breaker in {'gemini', 'cached'} else None
+        if family:
+            selection.update(family=family, invariant=INVARIANTS[family])
         (private / 'fault.json').write_text(json.dumps(selection), encoding='utf-8')
         check_protected(workspace, manifest)
         if breaker in {'gemini', 'cached'}:
@@ -602,7 +608,8 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3, c
                             ' Breaker / ' + builder + ' Builder', battle))
                 save_details(db, battle, requested=breaker, producer=selection['producer'],
                              source=selection['source'], model=selection.get('model'),
-                             cache_id=selection.get('cache_id'), validated=True)
+                             cache_id=selection.get('cache_id'), validated=True,
+                             family=family, invariant=INVARIANTS[family])
             event(database, battle, 'fault_seeded',
                   ('Cached Gemini fault' if breaker == 'cached' else
                    'Gemini-generated fault' if not selection['fallback'] else 'Controlled fallback fault') +
@@ -655,18 +662,21 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3, c
                 continue
             if breaker in {'gemini', 'cached'}:
                 try:
-                    observation = direct_check(workspace, private / f'repair-direct-{attempt}', python)
+                    observation = direct_check(workspace, private / f'repair-direct-{attempt}', python,
+                                               family=family)
                 except InvalidFault:
-                    test_failure = 'Independent checkout check could not complete; repair is unverified.'
-                    event(database, battle, 'direct_check_failed', f'Attempt {attempt} could not complete the direct checkout check.')
+                    test_failure = 'Independent check could not complete; repair is unverified.'
+                    event(database, battle, 'direct_check_failed', f'Attempt {attempt} could not complete the selected direct check.')
                     continue
                 check_protected(workspace, manifest, allow_app=True)
                 if not observation['passed']:
-                    test_failure = ('Saved checkout amounts must be 4497, 450, 4047 cents; observed ' +
-                                    str(observation['actual_cents']))
-                    event(database, battle, 'direct_check_failed', f'Attempt {attempt} did not restore the independent checkout invariant.')
+                    test_failure = (('Saved checkout amounts must be 4497, 450, 4047 cents; observed ' +
+                                     str(observation['actual_cents'])) if family == 'pricing' else
+                                    'Cart must accept 99, reject 100 without changing the cart, and remove at zero. '
+                                    'Observed: ' + str(observation['actual']))
+                    event(database, battle, 'direct_check_failed', f'Attempt {attempt} did not restore the selected independent invariant.')
                     continue
-                event(database, battle, 'direct_check_passed', f'Attempt {attempt} restored the independent checkout invariant; Kane still pending.')
+                event(database, battle, 'direct_check_passed', f'Attempt {attempt} restored the selected independent invariant; Kane still pending.')
             event(database, battle, 'unit_tests_passed', f'Attempt {attempt} passed automated tests; Kane verification pending.')
             server.start()
             result = verify('after', attempt)
