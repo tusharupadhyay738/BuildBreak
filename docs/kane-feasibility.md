@@ -52,12 +52,40 @@ rounding, one fictional checkout, and same-order confirmation reload. The
 extraction stream reported 2.56 additional credits, separate from exploration.
 
 `context review --mode agent --json` refused with `TTY_REQUIRED`, explaining that
-verdict queues need a terminal or an explicit verdicts file. No context approval
-was issued. An attempted resume with `--trust auto` was rejected by automatic
+verdict queues need a terminal or an explicit verdicts file. An attempted resume
+with `--trust auto` was rejected by automatic
 approval review before execution because it could save/promote held items before
-the owner's approval. No workaround was used.
+the owner's approval. That command did not run.
 
-The owner must approve the exact held checkout proposal before applying it and
-designing a new test. No generated suite has been claimed and no new generated
-test has been executed. The existing protected checkout acceptance test and hash
-protection stay unchanged. Steps requiring a designed test remain pending.
+The owner subsequently authorized proceeding with the exact held proposal.
+Extraction resumed in agent mode for that proposal only, producing `uc-1`.
+Its title and seven criteria were compared with the held proposal. Explicit
+verdict files approved that use case and the 18 acceptance criteria derived
+within its scope. No `--allow-unreviewed` option was used.
+
+`design tests --use-case uc-1 --max 1 --strength pairwise --mode override --json`
+produced one eight-step checkout test. The local context store and its variable
+file remain private; this is a generated happy path, not a comprehensive suite.
+
+## One generated healthy-app run
+
+The generated definition is saved separately as
+`.testmuai/tests/KaneGeneratedCheckout_test.md`. It was run once with `testmd run`,
+headless desktop testing, no adaptive healing, a fresh isolated database and a
+run-supplied local start URL. The result exited 0: eight of eight steps passed.
+Execution identifier: `34493b75-4a13-49fe-ae22-0d65879e25f3`.
+
+The saved sealed pack was copied byte-for-byte and checked for execution
+identity, passed verdict, definition hash and isolated target URL. It stays
+Git-ignored. Definition SHA-256:
+`f91cd2b2529ad147210ce7483401af360edf281d9078bd398af39aed40a15d7d`.
+
+This run exercised cart/coupon reset, catalog prices, the two-shirt/one-sticker
+SAVE10 order, and the same confirmation after reload. It does not establish
+quantity boundaries, concurrent submissions, all checkout combinations or
+full-app correctness. Kane's reported criterion coverage applies only to the
+18 generated criteria. It does not measure application-wide coverage.
+
+The existing protected `CheckoutConsistency_test.md`, its hash protection and
+the battle runner's choice of acceptance test remain unchanged. The additional
+generated test is not substituted into normal battles.
