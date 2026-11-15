@@ -97,7 +97,7 @@ def command(args, cwd, timeout=60, input_text=None, environment='cli'):
 def snapshot(source, destination):
     """Explicit allowlist: never copy credentials, evidence, databases or history."""
     files = ['app.py', 'arena.py', 'test_app.py', 'test_arena.py',
-             'import_battle.py', 'battle_history.py', 'requirements.txt', TEST.as_posix()]
+             'import_battle.py', 'battle_history.py', 'evidence_images.py', 'requirements.txt', TEST.as_posix()]
     for folder in ('templates', 'static'):
         files += [p.relative_to(source).as_posix() for p in (source / folder).rglob('*') if p.is_file()]
     for name in files:

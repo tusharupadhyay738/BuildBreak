@@ -3,9 +3,10 @@ import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
-from flask import render_template, request
+from flask import render_template, request, abort, url_for
 from datetime import datetime, timedelta, timezone
 from battle_history import decorate, summarize
+from evidence_images import screenshot_for
 
 STATE_LABELS = {
     'prepared': 'Battle prepared', 'verifying': 'Kane is checking',
@@ -50,6 +51,7 @@ def register_arena(app):
     app.jinja_env.filters['arena_time'] = display_time
     app.config.setdefault("ARENA_DATABASE", str(Path(app.instance_path) / "arena.sqlite3"))
     app.config.setdefault("ARENA_SOURCES", str(Path(app.instance_path) / "arena-sources.json"))
+    app.config.setdefault('ARENA_ARTIFACTS', str(Path(app.instance_path) / 'battles'))
     with closing(sqlite3.connect(app.config["ARENA_DATABASE"])) as connection:
         connection.executescript(SCHEMA)
 
@@ -68,10 +70,47 @@ def register_arena(app):
                 sessions.append(decorate(item, dict(detail) if detail else None))
             return sessions
 
+    def attach_screenshots(sessions, selected):
+        for session in sessions:
+            session['screenshots'] = []
+            if session['id'] != selected:
+                continue
+            for phase, title in [('before', 'After fault injection'), ('after', 'After repair')]:
+                runs = [dict(run) for run in session['verifications'] if run['phase'] == phase]
+                run = runs[-1] if runs else None
+                image = screenshot_for(app.config['ARENA_ARTIFACTS'], session['id'], run) if run else None
+                session['screenshots'].append(dict(
+                    title=title, result=run['result'] if run else None,
+                    evidence_id=run['evidence_id'] if run else None,
+                    checkpoint=image.checkpoint if image else None,
+                    ordinal=image.ordinal if image else None,
+                    observations=image.observations if image else (),
+                    url=url_for('arena_screenshot', battle=session['id'], phase=phase, attempt=run['attempt']) if image else None,
+                    unavailable='Screenshot unavailable' if run else 'Waiting for verification'))
+
+    @app.get('/arena/evidence/<battle>/<phase>/<int:attempt>/screenshot')
+    def arena_screenshot(battle, phase, attempt):
+        with closing(sqlite3.connect(app.config['ARENA_DATABASE'])) as connection:
+            connection.row_factory = sqlite3.Row
+            if not connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='arena_verifications'").fetchone():
+                abort(404)
+            run = connection.execute('''SELECT phase,attempt,result,evidence_id,pack_hash,test_hash
+                FROM arena_verifications WHERE battle_id=? AND phase=? AND attempt=?''',
+                (battle, phase, attempt)).fetchone()
+        image = screenshot_for(app.config['ARENA_ARTIFACTS'], battle, dict(run)) if run else None
+        if image is None:
+            abort(404)
+        response = app.response_class(image.content, mimetype=image.mimetype)
+        response.headers.update({'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+                                 'Referrer-Policy': 'no-referrer',
+                                 'Content-Disposition': 'inline; filename="screenshot.' + ('jpg' if image.mimetype == 'image/jpeg' else 'png') + '"'})
+        return response
+
     @app.get("/arena/live")
     def arena_live():
         sessions = live_battles()
         selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
+        attach_screenshots(sessions, selected)
         response = app.make_response(render_template("live_battles.html", sessions=sessions, selected_id=selected,
                                                      scores=summarize(sessions)))
         response.headers["Cache-Control"] = "no-store"
@@ -92,5 +131,6 @@ def register_arena(app):
             evidence[run["phase"]] = {key: availability(source.get(key)) for key in ("report", "pack")}
         sessions = live_battles()
         selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
+        attach_screenshots(sessions, selected)
         return render_template("arena.html", battle=battle, runs=runs, evidence=evidence, sessions=sessions,
                                selected_id=selected, scores=summarize(sessions))
