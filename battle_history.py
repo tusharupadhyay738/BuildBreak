@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS arena_drill_details (
  battle_id TEXT PRIMARY KEY, requested_breaker TEXT NOT NULL,
  producer TEXT, source TEXT, model TEXT, cache_id TEXT,
  independently_validated INTEGER NOT NULL DEFAULT 0,
- outcome TEXT, max_attempts INTEGER, family TEXT, invariant TEXT);
+ outcome TEXT, max_attempts INTEGER, family TEXT, invariant TEXT, experiment TEXT);
 """
 
 OUTCOME_LABELS = {
@@ -22,7 +22,7 @@ PRODUCER_LABELS = {
 def ensure_details_schema(connection):
     connection.execute(DETAIL_SCHEMA)
     columns = {row[1] for row in connection.execute('PRAGMA table_info(arena_drill_details)')}
-    for name in ('family', 'invariant'):
+    for name in ('family', 'invariant', 'experiment'):
         if name not in columns:
             connection.execute('ALTER TABLE arena_drill_details ADD COLUMN ' + name + ' TEXT')
 
@@ -43,25 +43,28 @@ def outcome_for(state, verifications, independently_validated):
 
 def save_details(connection, battle, *, requested, producer=None, source=None,
                  model=None, cache_id=None, validated=False, max_attempts=None,
-                 family=None, invariant=None):
+                 family=None, invariant=None, experiment=None):
+    if experiment not in {None, 'builder_without_kane'}:
+        raise ValueError('Unknown experiment')
     ensure_details_schema(connection)
     connection.execute('''INSERT INTO arena_drill_details
-        (battle_id,requested_breaker,producer,source,model,cache_id,independently_validated,max_attempts,family,invariant)
-        VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(battle_id) DO UPDATE SET
+        (battle_id,requested_breaker,producer,source,model,cache_id,independently_validated,max_attempts,family,invariant,experiment)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(battle_id) DO UPDATE SET
         producer=excluded.producer,source=excluded.source,model=excluded.model,
         cache_id=excluded.cache_id,independently_validated=excluded.independently_validated,
-        family=excluded.family,invariant=excluded.invariant''',
-        (battle, requested, producer, source, model, cache_id, int(validated), max_attempts, family, invariant))
+        family=excluded.family,invariant=excluded.invariant,experiment=excluded.experiment''',
+        (battle, requested, producer, source, model, cache_id, int(validated), max_attempts, family, invariant, experiment))
 
 
 def update_outcome(connection, battle, state):
-    detail = connection.execute('SELECT independently_validated FROM arena_drill_details WHERE battle_id=?',
+    detail = connection.execute('SELECT independently_validated,experiment FROM arena_drill_details WHERE battle_id=?',
                                 (battle,)).fetchone()
     if detail is None:
         return
     rows = connection.execute('SELECT phase,result FROM arena_verifications WHERE battle_id=? ORDER BY rowid',
                               (battle,)).fetchall()
-    outcome = outcome_for(state, [dict(zip(('phase', 'result'), row)) for row in rows], bool(detail[0]))
+    outcome = (outcome_for(state, [dict(zip(('phase', 'result'), row)) for row in rows], bool(detail[0]))
+               if not detail[1] else None)
     connection.execute('UPDATE arena_drill_details SET outcome=? WHERE battle_id=?', (outcome, battle))
 
 
@@ -75,6 +78,7 @@ def decorate(item, detail):
         item['drill']['producer_label'] = PRODUCER_LABELS.get(detail['producer'], 'Not recorded')
         item['drill']['outcome_label'] = OUTCOME_LABELS.get(detail['outcome'], 'Not scored')
         item['drill'].update(family=detail.get('family'), invariant=detail.get('invariant'))
+        item['drill']['experiment'] = detail.get('experiment')
     return item
 
 
@@ -83,7 +87,7 @@ def summarize(sessions):
     counts = {key: 0 for key in OUTCOME_LABELS}
     for session in sessions:
         detail = session.get('drill')
-        if detail and detail['independently_validated'] and detail['outcome'] in counts:
+        if detail and not detail.get('experiment') and detail['independently_validated'] and detail['outcome'] in counts:
             counts[detail['outcome']] += 1
     counts['scored'] = sum(counts.values())
     counts['caught'] = counts['caught_and_repaired'] + counts['caught_needs_human']
