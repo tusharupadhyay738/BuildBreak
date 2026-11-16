@@ -7,9 +7,9 @@ import unittest
 from unittest.mock import patch
 
 from app import create_app
-import battle_runner as runner
-from battle_history import summarize
-from test_fault_validator import proposal
+import buildbreak.battle_runner as runner
+from buildbreak.battle_history import summarize
+from tests.test_fault_validator import proposal
 
 
 class BuilderAblationTests(unittest.TestCase):
@@ -29,7 +29,7 @@ class BuilderAblationTests(unittest.TestCase):
             self.assertEqual([p.name for p in context.iterdir()], ['app.py'])
             prompts.append(prompt)
             return {'app_source': 'fixture'}
-        with patch('battle_runner.codex_json', side_effect=response):
+        with patch('buildbreak.battle_runner.codex_json', side_effect=response):
             for index, omit in enumerate((False, True)):
                 runner.builder_patch('fixture', self.workspace, self.root / f'prompt-{index}',
                                      'UNIQUE_SYNTHETIC_KANE_FAILURE', omit_kane_feedback=omit)
@@ -58,14 +58,14 @@ class BuilderAblationTests(unittest.TestCase):
             artifacts.mkdir()
             return dict(app_source='def broken(' if rejected else original, explanation='fixture')
         statuses = ['passed', 'verification_failed'] + ([] if rejected else ['passed'])
-        with patch('battle_runner.gemini_configuration'), \
-                patch('battle_runner.executable', return_value=sys.executable), \
-                patch('battle_runner.command', return_value=SimpleNamespace(stdout='fixture', stderr='', returncode=0)), \
-                patch('battle_runner.Server'), patch('battle_runner.json_command', return_value=counts), \
-                patch('battle_runner.direct_check', return_value={'passed': True}), \
-                patch('battle_runner.select_gemini_fault', return_value=(selection, broken)), \
-                patch('battle_runner.run_kane', side_effect=[verdict(status) for status in statuses]) as kane, \
-                patch('battle_runner.codex_json', side_effect=response) as codex:
+        with patch('buildbreak.battle_runner.gemini_configuration'), \
+                patch('buildbreak.battle_runner.executable', return_value=sys.executable), \
+                patch('buildbreak.battle_runner.command', return_value=SimpleNamespace(stdout='fixture', stderr='', returncode=0)), \
+                patch('buildbreak.battle_runner.Server'), patch('buildbreak.battle_runner.json_command', return_value=counts), \
+                patch('buildbreak.battle_runner.direct_check', return_value={'passed': True}), \
+                patch('buildbreak.battle_runner.select_gemini_fault', return_value=(selection, broken)), \
+                patch('buildbreak.battle_runner.run_kane', side_effect=[verdict(status) for status in statuses]) as kane, \
+                patch('buildbreak.battle_runner.codex_json', side_effect=response) as codex:
             battle = runner.run_battle(self.workspace, breaker='gemini', builder='codex',
                                        max_attempts=1, omit_kane_feedback=True)
         self.assertEqual(codex.call_count, 1)
@@ -92,7 +92,7 @@ class BuilderAblationTests(unittest.TestCase):
         self.assertEqual((result['scored'], result['excluded']), (0, 1))
 
     def test_invalid_ablation_mode_stops_before_any_cli_call(self):
-        with patch('battle_runner.executable') as cli:
+        with patch('buildbreak.battle_runner.executable') as cli:
             for builder, attempts in [('human', 1), ('codex', 3)]:
                 with self.assertRaisesRegex(ValueError, 'exactly one'):
                     runner.run_battle(self.workspace, builder=builder, max_attempts=attempts,

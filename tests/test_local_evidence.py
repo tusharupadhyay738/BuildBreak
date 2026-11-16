@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from battle_runner import ROOT, TEST, snapshot, digest, find_evidence_pack, run_kane
+from buildbreak.battle_runner import ROOT, TEST, snapshot, digest, find_evidence_pack, run_kane
 
 
 class LocalEvidenceTests(unittest.TestCase):
@@ -42,8 +42,8 @@ class LocalEvidenceTests(unittest.TestCase):
 
     def execute(self, events):
         output = '\n'.join(json.dumps(event) for event in events)
-        with patch('battle_runner.KANE_SESSION_ROOT', self.sessions), \
-                patch('battle_runner.owned_run', return_value=subprocess.CompletedProcess([], 0, output, '')):
+        with patch('buildbreak.battle_runner.KANE_SESSION_ROOT', self.sessions), \
+                patch('buildbreak.battle_runner.owned_run', return_value=subprocess.CompletedProcess([], 0, output, '')):
             return run_kane(self.workspace, self.root / 'verification', self.url, 'fixture', 'synthetic-kane')
 
     def test_local_sealed_pack_works_without_cloud_ingest_and_records_provenance(self):
@@ -65,7 +65,7 @@ class LocalEvidenceTests(unittest.TestCase):
     def test_arbitrary_paths_and_wrong_sessions_are_not_accepted(self):
         self.write_pack()
         events = self.events()
-        with patch('battle_runner.KANE_SESSION_ROOT', self.sessions):
+        with patch('buildbreak.battle_runner.KANE_SESSION_ROOT', self.sessions):
             events[-1]['session_id'] = '33333333-3333-4333-8333-333333333333'
             self.assertEqual(find_evidence_pack(events, self.workspace), (None, None, None))
             events[-1]['session_id'] = self.session

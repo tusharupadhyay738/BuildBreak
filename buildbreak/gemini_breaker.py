@@ -140,7 +140,7 @@ def diagnose():
     except GeminiError as error:
         report.update(kind=error.kind, http_status=error.status, retryable=error.retryable, message=str(error))
     report['duration_seconds'] = round(time.monotonic() - started, 2)
-    folder = Path(__file__).resolve().parent / 'instance/gemini-diagnostics' / (
+    folder = Path(__file__).resolve().parents[1] / 'instance/gemini-diagnostics' / (
         datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S') + '-' + uuid.uuid4().hex[:8])
     folder.mkdir(parents=True)
     (folder / 'result.json').write_text(json.dumps(report, indent=2), encoding='utf-8')

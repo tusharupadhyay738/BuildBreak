@@ -10,8 +10,8 @@ import urllib.error
 from unittest.mock import patch
 
 from contextlib import redirect_stdout
-from gemini_breaker import configuration, propose_fault, GeminiError, diagnose
-from process_control import child_environment
+from buildbreak.gemini_breaker import configuration, propose_fault, GeminiError, diagnose
+from buildbreak.process_control import child_environment
 
 
 class GeminiTests(unittest.TestCase):
@@ -35,7 +35,7 @@ class GeminiTests(unittest.TestCase):
         proposal = {'file': 'app.py', 'old_text': 'a', 'new_text': 'b', 'description': 'fixture'}
         response = {'candidates': [{'finishReason': 'STOP', 'content': {'parts': [
             {'text': 'private thought', 'thought': True}, {'text': json.dumps(proposal)}]}}]}
-        with self.environment(), patch('gemini_breaker.urllib.request.urlopen',
+        with self.environment(), patch('buildbreak.gemini_breaker.urllib.request.urlopen',
                                       return_value=io.BytesIO(json.dumps(response).encode())) as fetch:
             self.assertEqual(propose_fault('fixture source'), proposal)
         request = fetch.call_args.args[0]
@@ -48,7 +48,7 @@ class GeminiTests(unittest.TestCase):
 
     def test_http_errors_never_expose_provider_body_or_key(self):
         error = urllib.error.HTTPError('https://example.invalid', 429, 'private-response', {}, None)
-        with self.environment(), patch('gemini_breaker.urllib.request.urlopen', side_effect=error):
+        with self.environment(), patch('buildbreak.gemini_breaker.urllib.request.urlopen', side_effect=error):
             with self.assertRaises(GeminiError) as caught:
                 propose_fault('fixture')
         self.assertIn('429', str(caught.exception))
@@ -59,7 +59,7 @@ class GeminiTests(unittest.TestCase):
         for response in (b'not JSON', b'{"candidates": []}',
                          b'{"candidates": [{"finishReason": "MAX_TOKENS"}]}', b'x' * 1000001):
             with self.subTest(size=len(response)), self.environment(), \
-                    patch('gemini_breaker.urllib.request.urlopen', return_value=io.BytesIO(response)):
+                    patch('buildbreak.gemini_breaker.urllib.request.urlopen', return_value=io.BytesIO(response)):
                 with self.assertRaises(GeminiError):
                     propose_fault('fixture')
 
@@ -77,7 +77,7 @@ class GeminiTests(unittest.TestCase):
                     (urllib.error.URLError('secret detail'), 'connection_error')]
         for failure, kind in failures:
             with self.subTest(kind=kind), self.environment(), \
-                    patch('gemini_breaker.urllib.request.urlopen', side_effect=failure):
+                    patch('buildbreak.gemini_breaker.urllib.request.urlopen', side_effect=failure):
                 with self.assertRaises(GeminiError) as caught:
                     propose_fault('fixture')
                 self.assertEqual(caught.exception.kind, kind)
@@ -87,7 +87,7 @@ class GeminiTests(unittest.TestCase):
         for status, retryable in [(503, True), (429, True), (403, False), (400, False), (404, False)]:
             error = urllib.error.HTTPError('https://example.invalid', status, 'private', {}, None)
             with self.subTest(status=status), self.environment(), \
-                    patch('gemini_breaker.urllib.request.urlopen', side_effect=error):
+                    patch('buildbreak.gemini_breaker.urllib.request.urlopen', side_effect=error):
                 with self.assertRaises(GeminiError) as caught:
                     propose_fault('fixture')
                 self.assertEqual(caught.exception.status, status)
@@ -95,7 +95,7 @@ class GeminiTests(unittest.TestCase):
 
     def test_token_exhaustion_is_not_reported_as_network_failure(self):
         response = {'candidates': [{'finishReason': 'MAX_TOKENS'}]}
-        with self.environment(), patch('gemini_breaker.urllib.request.urlopen',
+        with self.environment(), patch('buildbreak.gemini_breaker.urllib.request.urlopen',
                                       return_value=io.BytesIO(json.dumps(response).encode())):
             with self.assertRaises(GeminiError) as caught:
                 propose_fault('fixture')
@@ -107,7 +107,7 @@ class GeminiTests(unittest.TestCase):
                      (json.dumps({'candidates': [{'finishReason': 'STOP', 'content': {'parts': [
                          {'text': 'not json'}]}}]}).encode(), 'invalid_candidate_json')]
         for response, kind in responses:
-            with self.environment(), patch('gemini_breaker.urllib.request.urlopen', return_value=io.BytesIO(response)):
+            with self.environment(), patch('buildbreak.gemini_breaker.urllib.request.urlopen', return_value=io.BytesIO(response)):
                 with self.assertRaises(GeminiError) as caught:
                     propose_fault('fixture')
                 self.assertEqual(caught.exception.kind, kind)
@@ -115,8 +115,8 @@ class GeminiTests(unittest.TestCase):
     def test_diagnostic_makes_one_small_request_and_saves_no_key_or_source(self):
         response = {'candidates': [{'finishReason': 'STOP', 'content': {'parts': [{'text': '{"status":"ok"}'}]}}]}
         with tempfile.TemporaryDirectory(dir='.') as folder, self.environment(), \
-                patch('gemini_breaker.__file__', str(Path(folder).resolve() / 'gemini_breaker.py')), \
-                patch('gemini_breaker.urllib.request.urlopen', return_value=io.BytesIO(json.dumps(response).encode())) as fetch, \
+                patch('buildbreak.gemini_breaker.__file__', str(Path(folder).resolve() / 'buildbreak/gemini_breaker.py')), \
+                patch('buildbreak.gemini_breaker.urllib.request.urlopen', return_value=io.BytesIO(json.dumps(response).encode())) as fetch, \
                 redirect_stdout(io.StringIO()) as output:
             self.assertEqual(diagnose(), 0)
             files = list(Path(folder).glob('instance/gemini-diagnostics/*/result.json'))
@@ -129,8 +129,8 @@ class GeminiTests(unittest.TestCase):
 
     def test_diagnostic_failure_saves_safe_category_without_retrying(self):
         with tempfile.TemporaryDirectory(dir='.') as folder, self.environment(), \
-                patch('gemini_breaker.__file__', str(Path(folder).resolve() / 'gemini_breaker.py')), \
-                patch('gemini_breaker.urllib.request.urlopen', side_effect=TimeoutError('private')) as fetch, \
+                patch('buildbreak.gemini_breaker.__file__', str(Path(folder).resolve() / 'buildbreak/gemini_breaker.py')), \
+                patch('buildbreak.gemini_breaker.urllib.request.urlopen', side_effect=TimeoutError('private')) as fetch, \
                 redirect_stdout(io.StringIO()) as output:
             self.assertEqual(diagnose(), 1)
             self.assertEqual(json.loads(output.getvalue())['kind'], 'timeout')

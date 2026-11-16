@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from battle_runner import ROOT, TEST, FAULTS, Server, snapshot, digest
-from fault_validator import InvalidFault, patch_source, validate_fault, direct_check, protected
-from process_control import run
+from buildbreak.battle_runner import ROOT, TEST, FAULTS, Server, snapshot, digest
+from buildbreak.fault_validator import InvalidFault, patch_source, validate_fault, direct_check, protected
+from buildbreak.process_control import run
 
 
 def proposal(fault='order-total'):
@@ -92,15 +92,15 @@ class ValidatorTests(unittest.TestCase):
             dict(run=8, failures=0, errors=0, skipped=0, expected_failures=0, unexpected_successes=0),
         ):
             folder = self.artifacts / ('counts-' + str(counts['failures']) + '-' + str(counts['errors']))
-            with patch('fault_validator.json_command', return_value=counts), \
+            with patch('buildbreak.fault_validator.json_command', return_value=counts), \
                     patch.object(Server, 'start'), patch.object(Server, 'stop'):
                 with self.assertRaises(InvalidFault):
                     validate_fault(self.workspace, folder, sys.executable, self.manifest, proposal(), Server)
 
     def test_rejects_unproven_fault_and_modified_acceptance_test(self):
         counts = dict(run=8, failures=1, errors=0, skipped=0, expected_failures=0, unexpected_successes=0)
-        with patch('fault_validator.json_command', return_value=counts), \
-                patch('fault_validator.direct_check', return_value={'passed': True}), \
+        with patch('buildbreak.fault_validator.json_command', return_value=counts), \
+                patch('buildbreak.fault_validator.direct_check', return_value={'passed': True}), \
                 patch.object(Server, 'start'), patch.object(Server, 'stop'):
             with self.assertRaisesRegex(InvalidFault, 'unproven'):
                 validate_fault(self.workspace, self.artifacts / 'unproven', sys.executable,

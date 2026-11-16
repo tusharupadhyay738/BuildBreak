@@ -6,8 +6,8 @@ import tempfile
 import unittest
 
 from app import create_app
-from battle_runner import ROOT, SCHEMA, connect, event, record_run
-from battle_history import save_details, outcome_for, summarize
+from buildbreak.battle_runner import ROOT, SCHEMA, connect, event, record_run
+from buildbreak.battle_history import save_details, outcome_for, summarize
 
 
 class HistoryTests(unittest.TestCase):

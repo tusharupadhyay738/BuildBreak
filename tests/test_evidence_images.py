@@ -9,8 +9,8 @@ from unittest.mock import patch
 import zipfile
 
 from app import create_app
-from battle_runner import ROOT, connect, record_run
-from evidence_images import screenshot_for
+from buildbreak.battle_runner import ROOT, connect, record_run
+from buildbreak.evidence_images import screenshot_for
 
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==')
 
@@ -105,9 +105,9 @@ class EvidenceImageTests(unittest.TestCase):
         self.write_pack(traversal=True)
         self.assertIsNone(screenshot_for(self.artifacts, '../' + self.battle, self.run))
         self.assertIsNone(screenshot_for(self.root / 'missing', self.battle, self.run))
-        with patch('evidence_images.MAX_IMAGE_BYTES', 1):
+        with patch('buildbreak.evidence_images.MAX_IMAGE_BYTES', 1):
             self.assertIsNone(screenshot_for(self.artifacts, self.battle, self.run))
-        with patch('evidence_images.MAX_PACK_BYTES', 1):
+        with patch('buildbreak.evidence_images.MAX_PACK_BYTES', 1):
             self.assertIsNone(screenshot_for(self.artifacts, self.battle, self.run))
 
     def test_linked_root_is_rejected_before_reading(self):

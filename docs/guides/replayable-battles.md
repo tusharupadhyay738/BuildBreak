@@ -2,7 +2,7 @@
 
 A full Codex Breaker / Codex Builder battle has completed with real Kane
 baseline, failure, and repaired pass evidence. See
-[the first automatic battle record](first-automatic-battle.md).
+[the first automatic battle record](../evidence/first-automatic-battle.md).
 
 The runner snapshots an explicit allowlist from the current working tree,
 records its Git HEAD and per-file hashes, and creates an isolated Flask app

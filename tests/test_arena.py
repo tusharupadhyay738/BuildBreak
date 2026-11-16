@@ -5,7 +5,7 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 from app import create_app
-from import_battle import import_battle
+from buildbreak.import_battle import import_battle
 
 class ArenaTests(unittest.TestCase):
     def setUp(self):

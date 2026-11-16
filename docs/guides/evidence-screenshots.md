@@ -43,7 +43,7 @@ private SQLite backup, without creating or changing any historical result.
 No synthetic test fixtures were inserted into that history.
 
 The shown battle is cached replay `20261115T051420-5ba874b2`, documented in
-[the replay account](cached-replay.md). It reused an earlier Gemini-generated
+[the replay account](../evidence/cached-replay.md). It reused an earlier Gemini-generated
 fault, with no Gemini API call during replay. The screenshots do not represent
 a new battle or a new Kane verification of the updated dashboard.
 
@@ -54,7 +54,7 @@ a new battle or a new Kane verification of the updated dashboard.
 
 These two JPEG files are unmodified copies from their recorded sealed packs.
 Their hashes and the source pack hashes are listed in
-[the image manifest](images/sources.json). The failure viewport shows the top
+[the image manifest](../images/sources.json). The failure viewport shows the top
 of the shop; the wrong discount was read in Kane's action log, outside the
 visible viewport. The dashboard therefore shows the recorded `$6.75` observation
 separately. The repaired image shows the `$40.47` confirmation.

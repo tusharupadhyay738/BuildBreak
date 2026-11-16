@@ -10,6 +10,7 @@
 <p align="center">
   <a href="#quickstart">Quickstart</a> ·
   <a href="#the-repair-loop">The loop</a> ·
+  <a href="#repository-map">Code map</a> ·
   <a href="#see-the-evidence">Screenshots</a> ·
   <a href="#what-is-proven">Proof and limits</a> ·
   <a href="#project-guide">Guides</a>
@@ -27,6 +28,35 @@ succeed within the attempt limit, it requests human review.
 
 **Arena is the tool. BreakShop is its currently supported demonstration app.**
 It is not yet a runner for arbitrary websites or production incident prediction.
+
+## Repository map
+
+```text
+BuildBreak/
+├── app.py                 # Start BreakShop and the Arena dashboard
+├── battle_runner.py       # Start a battle with the familiar CLI
+├── arena.py               # Small compatibility import for the frozen app source
+├── requirements.txt
+├── README.md
+├── buildbreak/            # Implementation: runner, agents, validation and dashboard
+├── tests/                 # Offline unit and integration tests
+├── templates/             # Flask pages
+├── static/                # Shop and dashboard styles
+├── docs/
+│   ├── guides/            # Setup, commands and safeguards
+│   ├── evidence/          # Genuine run accounts and the labeled sample report
+│   ├── demo/              # Presentation guide
+│   ├── specs/             # BreakShop requirements
+│   └── images/            # Reviewed screenshots and provenance
+└── .testmuai/tests/        # Kane acceptance definitions; protected test stays here
+```
+
+[Implementation map](buildbreak/README.md) · [Test guide](tests/README.md) ·
+[Documentation home](docs/README.md)
+
+The root launchers stay small. The `arena.py` adapter preserves the hash-bound
+BreakShop source and saved-cache compatibility; its implementation lives in
+`buildbreak/arena.py`. Private local artifacts remain in ignored `instance/`.
 
 ![Actual Arena dashboard showing genuine recorded battles, including a cached Gemini replay](docs/images/arena-dashboard.png)
 
@@ -107,8 +137,8 @@ Failure execution: `3bb786e9-4dce-4cfe-a473-603b6502714d`.<br>
 Repair execution: `a60b4704-7ca6-445e-9b4f-a2b92d0af544`.
 
 The two JPEGs are unchanged copies of selected frames. See
-[screenshot provenance and privacy](docs/evidence-screenshots.md) and
-[the verified replay account](docs/cached-replay.md).
+[screenshot provenance and privacy](docs/guides/evidence-screenshots.md) and
+[the verified replay account](docs/evidence/cached-replay.md).
 
 </details>
 
@@ -143,7 +173,7 @@ Try two shirts and one sticker pack with SAVE10. Use fictional checkout details;
 no payment is taken. Stop the server with **Ctrl+C**. Activation is unnecessary.
 
 **A fresh Arena starts empty.** The images above are historical examples, not
-preloaded results. Read the [SAMPLE report](docs/sample-report.md) without
+preloaded results. Read the [SAMPLE report](docs/evidence/sample-report.md) without
 creating fake history. A real battle records its own results automatically.
 
 Orders persist in ignored `instance/shop.sqlite3`. A random development session
@@ -154,7 +184,7 @@ for session continuity if needed. Flask's development server is for this local d
 
 You need local Chrome and your own installed, authenticated **Kane CLI and Codex
 CLI**, with available account allowances. The app-only quickstart needs neither.
-See [runner prerequisites and troubleshooting](docs/replayable-battles.md).
+See [runner prerequisites and troubleshooting](docs/guides/replayable-battles.md).
 
 Start with the controlled fallback: one prepared fault and a Codex Builder.
 The runner starts its own isolated app; your main shop is preserved.
@@ -179,7 +209,7 @@ recorded progress. The dashboard cannot launch agents or execute shell commands.
 
 Gemini is optional. It requires an environment-only key, an available model and
 explicit confirmation of free-tier access with billing disabled. Arena cannot
-verify billing status. See [Gemini setup and cache commands](docs/gemini-breaker.md).
+verify billing status. See [Gemini setup and cache commands](docs/guides/gemini-breaker.md).
 Cached replay still consumes Kane/Codex allowances and needs a private cache
 created locally; caches are not bundled in a clone.
 
@@ -187,11 +217,11 @@ created locally; caches are not bundled in a clone.
 
 | Capability | Evidence and current limit |
 | --- | --- |
-| Generated pricing drill | [Real Gemini → Kane → Codex → Kane run](docs/gemini-first-battle.md), caught and repaired. |
-| Cached replay | [Real repeat execution](docs/cached-replay.md), repaired without a Gemini call during replay. Same fault, not another bug discovery. |
+| Generated pricing drill | [Real Gemini → Kane → Codex → Kane run](docs/evidence/gemini-first-battle.md), caught and repaired. |
+| Cached replay | [Real repeat execution](docs/evidence/cached-replay.md), repaired without a Gemini call during replay. Same fault, not another bug discovery. |
 | Quantity-boundary faults | Separate direct probe accepts 99, rejects 100 without cart changes, and removes at zero. Local/mocked tests pass; a live quantity battle is pending. |
-| Builder feedback comparison | [Requirements-only ablation option](docs/builder-ablation.md), one attempt and excluded from scores. No live comparison yet. |
-| Requirements-to-test workflow | [Manual Kane feasibility gate](docs/kane-feasibility.md): partial exploration, approved requirements fallback, eight generated browser steps passed once. Not automatic onboarding. |
+| Builder feedback comparison | [Requirements-only ablation option](docs/guides/builder-ablation.md), one attempt and excluded from scores. No live comparison yet. |
+| Requirements-to-test workflow | [Manual Kane feasibility gate](docs/evidence/kane-feasibility.md): partial exploration, approved requirements fallback, eight generated browser steps passed once. Not automatic onboarding. |
 | Screenshot dashboard | Genuine existing packs displayed in desktop/mobile Chrome. No new Kane dashboard verification is claimed. |
 
 Passing the checkout test does not prove full-app correctness, security or
@@ -199,7 +229,7 @@ production readiness. The supported fault space and independent probes are
 explicit. The Builder also receives written expected amounts; we have not
 established how much Kane feedback improves repair success. Context separation
 and environment guards reduce accidental exposure; see the
-[local execution boundary](docs/execution-boundary.md).
+[local execution boundary](docs/guides/execution-boundary.md).
 
 The dashboard summarizes eligible executions among the **10 most recent records**.
 Interrupted, unfinished, unvalidated and requirements-only experiment records are
@@ -210,13 +240,14 @@ broader coverage. Missing screenshots leave saved verdicts unchanged.
 
 | Start here | Read more |
 | --- | --- |
-| Understand the runner | [Replayable battles](docs/replayable-battles.md) |
-| Configure Gemini or build a cache | [Gemini Breaker](docs/gemini-breaker.md) |
-| Inspect screenshot provenance | [Recorded screenshots](docs/evidence-screenshots.md) |
-| Read a result without running agents | [SAMPLE report](docs/sample-report.md) |
-| Prepare the presentation | [Three-minute demo guide](docs/demo-guide.md) |
-| Import the first human-triggered experiment | [Historical dashboard setup](docs/historical-dashboard.md) |
-| Check the stronger test contract | [Checkout consistency](docs/checkout-consistency.md) |
+| Browse the organized documentation | [Documentation home](docs/README.md) |
+| Understand the runner | [Replayable battles](docs/guides/replayable-battles.md) |
+| Configure Gemini or build a cache | [Gemini Breaker](docs/guides/gemini-breaker.md) |
+| Inspect screenshot provenance | [Recorded screenshots](docs/guides/evidence-screenshots.md) |
+| Read a result without running agents | [SAMPLE report](docs/evidence/sample-report.md) |
+| Prepare the presentation | [Three-minute demo guide](docs/demo/demo-guide.md) |
+| Import the first human-triggered experiment | [Historical dashboard setup](docs/guides/historical-dashboard.md) |
+| Check the stronger test contract | [Checkout consistency](docs/evidence/checkout-consistency.md) |
 
 Run the local unit suite:
 

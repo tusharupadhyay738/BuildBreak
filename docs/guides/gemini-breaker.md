@@ -2,7 +2,7 @@
 
 This is an optional addition. Existing controlled-fault commands continue to work.
 A real Gemini 3.5 Flash-Lite battle completed on November 14, 2026; see
-[the preserved-run account](gemini-first-battle.md). Offline orchestration fixtures
+[the preserved-run account](../evidence/gemini-first-battle.md). Offline orchestration fixtures
 remain separate and are not evidence of a live workflow.
 
 ## Configure locally without sharing the key
@@ -67,7 +67,7 @@ Remove-Item Env:GEMINI_API_KEY -ErrorAction SilentlyContinue
 From the terminal containing your environment variables:
 
 ```powershell
-.\.venv\Scripts\python.exe gemini_breaker.py --diagnose
+.\.venv\Scripts\python.exe -m buildbreak.gemini_breaker --diagnose
 ```
 
 This sends one small structured inference request using the configured model.
@@ -146,7 +146,7 @@ environment isolation and its limits. It is not a proof that repair code is safe
 From the configured terminal, request a small batch:
 
 ```powershell
-.\.venv\Scripts\python.exe cache_faults.py --count 3
+.\.venv\Scripts\python.exe -m buildbreak.cache_faults --count 3
 ```
 
 `--count` is the maximum number of proposal requests (1–10), not a promise of
@@ -159,7 +159,7 @@ partial-test-failure, protected-hash and independent-invariant validator.
 To reuse a genuine saved Gemini proposal without another API call:
 
 ```powershell
-.\.venv\Scripts\python.exe cache_faults.py --from-battle 20261114T181556-024e132e
+.\.venv\Scripts\python.exe -m buildbreak.cache_faults --from-battle 20261114T181556-024e132e
 ```
 
 This needs that private local battle's files and requires the app/test bindings
@@ -200,7 +200,7 @@ is recorded for new runs; older records show only the global safety ceiling.
 For supported saved live Gemini/fallback records, explicitly run:
 
 ```powershell
-.\.venv\Scripts\python.exe import_drill_history.py
+.\.venv\Scripts\python.exe -m buildbreak.import_drill_history
 ```
 
 This verifies the preserved mutation validation, protected files, source patch,

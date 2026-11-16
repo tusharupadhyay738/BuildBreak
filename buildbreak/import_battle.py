@@ -1,4 +1,4 @@
-"""Explicit local import: python import_battle.py --sources PRIVATE_JSON."""
+"""Explicit local import: python -m buildbreak.import_battle --sources PRIVATE_JSON."""
 import argparse
 import json
 import re
@@ -6,7 +6,7 @@ import sqlite3
 from contextlib import closing
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from arena import SCHEMA
+from .arena import SCHEMA
 
 INSTRUCTION = "Add a product to the cart, set its quantity to 2, apply SAVE10, and verify that the final total equals the subtotal minus a 10 percent discount."
 
@@ -49,7 +49,7 @@ def read_run(source, phase):
 def import_battle(sources_path, database):
     sources = json.loads(Path(sources_path).read_text(encoding="utf-8"))
     rows = [read_run(sources[phase], phase) for phase in ("before", "after")]
-    # Human-reviewed provenance from docs/first-battle.md; outcomes come from evidence.
+    # Human-reviewed provenance from docs/evidence/first-battle.md; outcomes come from evidence.
     battle = ("discount-regression", "219a3e006221296cb0158ce85b66e3280a0bb02a", "SAVE10 multiplier deliberately changed from 0.10 to 0.05.", "Builder restored the multiplier from 0.05 to 0.10. No separate repair commit or timestamp recorded.")
     Path(database).parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(database)) as connection:

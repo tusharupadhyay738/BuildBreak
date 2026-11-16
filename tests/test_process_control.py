@@ -7,8 +7,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from battle_runner import ROOT, RejectedRepair, validate_repair
-from process_control import child_environment, run
+from buildbreak.battle_runner import ROOT, RejectedRepair, validate_repair
+from buildbreak.process_control import child_environment, run
 
 
 class ChildEnvironmentTests(unittest.TestCase):

@@ -7,10 +7,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-import battle_runner as runner
+import buildbreak.battle_runner as runner
 from app import create_app
-from fault_cache import load_fault, store_fault
-from fault_validator import (InvalidFault, direct_check, fault_family, patch_source,
+from buildbreak.fault_cache import load_fault, store_fault
+from buildbreak.fault_validator import (InvalidFault, direct_check, fault_family, patch_source,
                              protected, validate_fault)
 
 
@@ -57,7 +57,7 @@ class QuantityFaultTests(unittest.TestCase):
                 patch_source(self.workspace, dict(file='app.py', old_text=old, new_text=new, description='fixture'))
 
     def test_healthy_quantity_failure_and_all_passing_tests_reject_candidate(self):
-        with patch('fault_validator.direct_check', return_value={'passed': False}), \
+        with patch('buildbreak.fault_validator.direct_check', return_value={'passed': False}), \
                 patch.object(runner.Server, 'start') as boot:
             with self.assertRaisesRegex(InvalidFault, 'Healthy cart'):
                 validate_fault(self.workspace, self.root / 'bad-healthy', sys.executable,
@@ -76,13 +76,13 @@ class QuantityFaultTests(unittest.TestCase):
 
     def test_quantity_candidate_rejects_test_errors_and_boot_failure(self):
         counts = dict(run=8, failures=1, errors=1, skipped=0, expected_failures=0, unexpected_successes=0)
-        with patch('fault_validator.direct_check', return_value={'passed': True}), \
-                patch('fault_validator.json_command', return_value=counts), \
+        with patch('buildbreak.fault_validator.direct_check', return_value={'passed': True}), \
+                patch('buildbreak.fault_validator.json_command', return_value=counts), \
                 patch.object(runner.Server, 'start'), patch.object(runner.Server, 'stop'):
             with self.assertRaisesRegex(InvalidFault, 'without test errors'):
                 validate_fault(self.workspace, self.root / 'test-error', sys.executable,
                                self.manifest, quantity_proposal(), runner.Server)
-        with patch('fault_validator.direct_check', return_value={'passed': True}), \
+        with patch('buildbreak.fault_validator.direct_check', return_value={'passed': True}), \
                 patch.object(runner.Server, 'start', side_effect=RuntimeError('fixture boot error')), \
                 patch.object(runner.Server, 'stop'):
             with self.assertRaisesRegex(InvalidFault, 'boot check'):
@@ -105,14 +105,14 @@ class QuantityFaultTests(unittest.TestCase):
             self.assertNotIn(quantity_proposal()['description'], prompt)
             artifacts.mkdir()
             return dict(app_source=source, explanation='fixture')
-        with patch('battle_runner.gemini_configuration'), \
-                patch('battle_runner.executable', return_value=sys.executable), \
-                patch('battle_runner.command', return_value=SimpleNamespace(stdout='fixture', stderr='', returncode=0)), \
-                patch('battle_runner.Server'), patch('battle_runner.json_command', return_value=counts), \
-                patch('battle_runner.direct_check', return_value={'passed': True}) as direct, \
-                patch('battle_runner.select_gemini_fault', return_value=(selection, candidate)), \
-                patch('battle_runner.run_kane', side_effect=[verdict('passed'), verdict('verification_failed'), verdict('passed')]), \
-                patch('battle_runner.codex_json', side_effect=reply):
+        with patch('buildbreak.battle_runner.gemini_configuration'), \
+                patch('buildbreak.battle_runner.executable', return_value=sys.executable), \
+                patch('buildbreak.battle_runner.command', return_value=SimpleNamespace(stdout='fixture', stderr='', returncode=0)), \
+                patch('buildbreak.battle_runner.Server'), patch('buildbreak.battle_runner.json_command', return_value=counts), \
+                patch('buildbreak.battle_runner.direct_check', return_value={'passed': True}) as direct, \
+                patch('buildbreak.battle_runner.select_gemini_fault', return_value=(selection, candidate)), \
+                patch('buildbreak.battle_runner.run_kane', side_effect=[verdict('passed'), verdict('verification_failed'), verdict('passed')]), \
+                patch('buildbreak.battle_runner.codex_json', side_effect=reply):
             battle = runner.run_battle(self.workspace, breaker='gemini', builder='codex')
         self.assertEqual(direct.call_args.kwargs['family'], 'cart_quantity')
         with runner.connect(self.workspace / 'instance/arena.sqlite3') as db:
@@ -128,15 +128,15 @@ class QuantityFaultTests(unittest.TestCase):
                         test_hash=self.manifest[runner.TEST.as_posix()], duration=0, failure='fixture')
         for status, outcome in [('passed', 'escaped'), ('infrastructure_error', None)]:
             with self.subTest(status=status), \
-                    patch('battle_runner.gemini_configuration'), \
-                    patch('battle_runner.executable', return_value=sys.executable), \
-                    patch('battle_runner.command', return_value=SimpleNamespace(stdout='fixture', stderr='', returncode=0)), \
-                    patch('battle_runner.Server'), \
-                    patch('battle_runner.json_command', return_value=counts), \
-                    patch('battle_runner.direct_check', return_value={'passed': True}), \
-                    patch('battle_runner.select_gemini_fault', return_value=(selection.copy(), candidate)), \
-                    patch('battle_runner.run_kane', side_effect=[verdict('passed'), verdict(status)]), \
-                    patch('battle_runner.builder_patch') as builder:
+                    patch('buildbreak.battle_runner.gemini_configuration'), \
+                    patch('buildbreak.battle_runner.executable', return_value=sys.executable), \
+                    patch('buildbreak.battle_runner.command', return_value=SimpleNamespace(stdout='fixture', stderr='', returncode=0)), \
+                    patch('buildbreak.battle_runner.Server'), \
+                    patch('buildbreak.battle_runner.json_command', return_value=counts), \
+                    patch('buildbreak.battle_runner.direct_check', return_value={'passed': True}), \
+                    patch('buildbreak.battle_runner.select_gemini_fault', return_value=(selection.copy(), candidate)), \
+                    patch('buildbreak.battle_runner.run_kane', side_effect=[verdict('passed'), verdict(status)]), \
+                    patch('buildbreak.battle_runner.builder_patch') as builder:
                 battle = runner.run_battle(self.workspace, breaker='gemini', builder='codex')
                 builder.assert_not_called()
             with runner.connect(self.workspace / 'instance/arena.sqlite3') as db:

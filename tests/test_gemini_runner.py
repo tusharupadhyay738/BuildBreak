@@ -7,10 +7,10 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import battle_runner as runner
-from gemini_breaker import GeminiError
-from fault_validator import InvalidFault
-from test_fault_validator import proposal
+import buildbreak.battle_runner as runner
+from buildbreak.gemini_breaker import GeminiError
+from buildbreak.fault_validator import InvalidFault
+from tests.test_fault_validator import proposal
 
 
 class GeminiRunnerTests(unittest.TestCase):
@@ -27,8 +27,8 @@ class GeminiRunnerTests(unittest.TestCase):
     def test_invalid_proposals_retry_from_unchanged_source_then_accept(self):
         original = (self.workspace / 'app.py').read_text(encoding='utf-8')
         messages = []
-        with patch('battle_runner.propose_fault', return_value=proposal()) as provider, \
-                patch('battle_runner.validate_fault', side_effect=[InvalidFault('bad'), 'valid candidate']):
+        with patch('buildbreak.battle_runner.propose_fault', return_value=proposal()) as provider, \
+                patch('buildbreak.battle_runner.validate_fault', side_effect=[InvalidFault('bad'), 'valid candidate']):
             selection, candidate = runner.select_gemini_fault(
                 self.workspace, self.private, sys.executable, self.manifest,
                 lambda *message: messages.append(message))
@@ -41,9 +41,9 @@ class GeminiRunnerTests(unittest.TestCase):
         self.assertEqual((self.workspace / 'app.py').read_text(encoding='utf-8'), original)
 
     def test_three_api_errors_fall_back_with_honest_attribution(self):
-        with patch('battle_runner.propose_fault', side_effect=GeminiError('HTTP 429')) as provider, \
-                patch('battle_runner.time.sleep') as wait, \
-                patch('battle_runner.validate_fault', return_value='validated fallback') as validator:
+        with patch('buildbreak.battle_runner.propose_fault', side_effect=GeminiError('HTTP 429')) as provider, \
+                patch('buildbreak.battle_runner.time.sleep') as wait, \
+                patch('buildbreak.battle_runner.validate_fault', return_value='validated fallback') as validator:
             selection, source = runner.select_gemini_fault(
                 self.workspace, self.private, sys.executable, self.manifest, lambda *args: None)
         self.assertEqual(provider.call_count, 3)
@@ -57,9 +57,9 @@ class GeminiRunnerTests(unittest.TestCase):
 
     def test_permanent_api_error_is_not_retried(self):
         error = GeminiError('HTTP 403', kind='http_error', status=403, retryable=False)
-        with patch('battle_runner.propose_fault', side_effect=error) as provider, \
-                patch('battle_runner.time.sleep') as wait, \
-                patch('battle_runner.validate_fault', return_value='validated fallback'):
+        with patch('buildbreak.battle_runner.propose_fault', side_effect=error) as provider, \
+                patch('buildbreak.battle_runner.time.sleep') as wait, \
+                patch('buildbreak.battle_runner.validate_fault', return_value='validated fallback'):
             selection, _ = runner.select_gemini_fault(
                 self.workspace, self.private, sys.executable, self.manifest, lambda *args: None)
         self.assertTrue(selection['fallback'])
@@ -87,7 +87,7 @@ class GeminiRunnerTests(unittest.TestCase):
                 self.assertNotIn('Gemini', prompt)
                 artifacts.mkdir()
                 return {'app_source': broken if fail_repairs else source, 'explanation': 'fixture'}
-            with patch('battle_runner.codex_json', side_effect=reply):
+            with patch('buildbreak.battle_runner.codex_json', side_effect=reply):
                 return actual_builder_patch(codex, workspace, artifacts, failure, previous_test_failure)
         from types import SimpleNamespace
         unit_result = SimpleNamespace(stdout='fixture', stderr='', returncode=0)
@@ -95,15 +95,15 @@ class GeminiRunnerTests(unittest.TestCase):
         observations = [{'passed': True, 'actual_cents': [4497, 450, 4047]}]
         if len(statuses) > 2 or fail_repairs:
             observations += [{'passed': not fail_repairs, 'actual_cents': [4497, 450, 4497]}] * 3
-        with patch('battle_runner.gemini_configuration', return_value=('fixture', 'gemini-test')), \
-                patch('battle_runner.executable', return_value=sys.executable), \
-                patch('battle_runner.Server') as server, \
-                patch('battle_runner.command', return_value=unit_result), \
-                patch('battle_runner.json_command', return_value=counts), \
-                patch('battle_runner.direct_check', side_effect=observations) as direct, \
-                patch('battle_runner.select_gemini_fault', return_value=(selection, broken)), \
-                patch('battle_runner.run_kane', side_effect=[result(s) for s in statuses]) as kane, \
-                patch('battle_runner.builder_patch', side_effect=builder) as repair:
+        with patch('buildbreak.battle_runner.gemini_configuration', return_value=('fixture', 'gemini-test')), \
+                patch('buildbreak.battle_runner.executable', return_value=sys.executable), \
+                patch('buildbreak.battle_runner.Server') as server, \
+                patch('buildbreak.battle_runner.command', return_value=unit_result), \
+                patch('buildbreak.battle_runner.json_command', return_value=counts), \
+                patch('buildbreak.battle_runner.direct_check', side_effect=observations) as direct, \
+                patch('buildbreak.battle_runner.select_gemini_fault', return_value=(selection, broken)), \
+                patch('buildbreak.battle_runner.run_kane', side_effect=[result(s) for s in statuses]) as kane, \
+                patch('buildbreak.battle_runner.builder_patch', side_effect=builder) as repair:
             server.return_value.url = 'http://127.0.0.1:1234'
             battle = runner.run_battle(self.workspace, breaker='gemini', builder='codex')
         database = self.workspace / 'instance/arena.sqlite3'
@@ -134,8 +134,8 @@ class GeminiRunnerTests(unittest.TestCase):
                          ('needs_human', 3, 2, 3, 4))
 
     def test_missing_gemini_setup_stops_before_any_kane_call(self):
-        with patch('battle_runner.gemini_configuration', side_effect=GeminiError('missing')), \
-                patch('battle_runner.run_kane') as kane:
+        with patch('buildbreak.battle_runner.gemini_configuration', side_effect=GeminiError('missing')), \
+                patch('buildbreak.battle_runner.run_kane') as kane:
             with self.assertRaises(GeminiError):
                 runner.run_battle(self.workspace, breaker='gemini')
         kane.assert_not_called()
@@ -144,7 +144,7 @@ class GeminiRunnerTests(unittest.TestCase):
         settings = self.private / 'instance/cli-paths.json'
         settings.parent.mkdir()
         settings.write_text(json.dumps({'codex': sys.executable}), encoding='utf-8')
-        with patch('battle_runner.ROOT', self.private), patch('battle_runner.shutil.which', return_value=None):
+        with patch('buildbreak.battle_runner.ROOT', self.private), patch('buildbreak.battle_runner.shutil.which', return_value=None):
             self.assertEqual(runner.executable('codex'), sys.executable)
             settings.write_text(json.dumps({'codex': str(self.private / 'missing.exe')}), encoding='utf-8')
             with self.assertRaisesRegex(RuntimeError, 'Configured codex path is missing'):

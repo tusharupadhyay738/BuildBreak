@@ -10,7 +10,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-from process_control import run
+from .process_control import run
 
 
 class InvalidFault(ValueError):

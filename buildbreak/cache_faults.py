@@ -8,13 +8,13 @@ import sys
 import time
 import uuid
 
-from gemini_breaker import configuration, propose_fault, GeminiError
-from fault_cache import store_fault
-from fault_validator import InvalidFault, json_command, TEST_SCRIPT, direct_check, protected, validate_fault
+from .gemini_breaker import configuration, propose_fault, GeminiError
+from .fault_cache import store_fault
+from .fault_validator import InvalidFault, json_command, TEST_SCRIPT, direct_check, protected, validate_fault
 
 
 def prepare(root, python):
-    from battle_runner import snapshot
+    from .battle_runner import snapshot
     root = Path(root).resolve()
     folder = root / 'instance/fault-cache-runs' / (
         datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S') + '-' + uuid.uuid4().hex[:8])
@@ -32,7 +32,7 @@ def prepare(root, python):
 
 
 def cache_faults(root, python, count=3, from_battle=None):
-    from battle_runner import Server
+    from .battle_runner import Server
     if not 1 <= count <= 10:
         raise ValueError('Count must be between 1 and 10 requests.')
     imported = None
@@ -82,7 +82,7 @@ def main():
     parser.add_argument('--from-battle', help='Revalidate an existing Gemini proposal without an API call')
     args = parser.parse_args()
     try:
-        results = cache_faults(Path(__file__).resolve().parent, sys.executable, args.count, args.from_battle)
+        results = cache_faults(Path(__file__).resolve().parents[1], sys.executable, args.count, args.from_battle)
         accepted = len({r['cache_id'] for r in results if r['accepted']})
         print(f'{accepted} distinct validated fault(s) cached; {len(results)} proposal(s) checked.')
         return 0 if accepted else 1

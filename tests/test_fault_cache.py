@@ -7,11 +7,11 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-import battle_runner as runner
-from cache_faults import cache_faults
-from fault_cache import identity, load_fault, store_fault
-from fault_validator import InvalidFault
-from test_fault_validator import proposal
+import buildbreak.battle_runner as runner
+from buildbreak.cache_faults import cache_faults
+from buildbreak.fault_cache import identity, load_fault, store_fault
+from buildbreak.fault_validator import InvalidFault
+from tests.test_fault_validator import proposal
 
 
 class FaultCacheTests(unittest.TestCase):
@@ -69,12 +69,12 @@ class FaultCacheTests(unittest.TestCase):
         def builder(codex, workspace, artifacts, failure, previous_test_failure=''):
             artifacts.mkdir()
             return {'app_source': original, 'explanation': 'synthetic repair'}
-        with patch('battle_runner.executable', return_value=sys.executable), \
-                patch('battle_runner.command', return_value=SimpleNamespace(returncode=0, stdout='fixture', stderr='')), \
-                patch('battle_runner.gemini_configuration', side_effect=AssertionError('Must not need key')), \
-                patch('battle_runner.propose_fault', side_effect=AssertionError('Must not call API')), \
-                patch('battle_runner.run_kane', side_effect=[verdict('passed'), verdict('verification_failed'), verdict('passed')]), \
-                patch('battle_runner.builder_patch', side_effect=builder):
+        with patch('buildbreak.battle_runner.executable', return_value=sys.executable), \
+                patch('buildbreak.battle_runner.command', return_value=SimpleNamespace(returncode=0, stdout='fixture', stderr='')), \
+                patch('buildbreak.battle_runner.gemini_configuration', side_effect=AssertionError('Must not need key')), \
+                patch('buildbreak.battle_runner.propose_fault', side_effect=AssertionError('Must not call API')), \
+                patch('buildbreak.battle_runner.run_kane', side_effect=[verdict('passed'), verdict('verification_failed'), verdict('passed')]), \
+                patch('buildbreak.battle_runner.builder_patch', side_effect=builder):
             battle = runner.run_battle(self.workspace, breaker='cached', cached_fault=path, builder='codex')
         with runner.connect(self.workspace / 'instance/arena.sqlite3') as db:
             self.assertEqual(db.execute('SELECT state FROM arena_sessions WHERE id=?', (battle,)).fetchone()[0], 'completed')
@@ -91,16 +91,16 @@ class FaultCacheTests(unittest.TestCase):
         record['bindings']['app.py'] = 'wrong'
         record['id'] = identity(record)
         path.write_text(json.dumps(record))
-        with patch('battle_runner.executable', return_value=sys.executable), patch('battle_runner.run_kane') as kane:
+        with patch('buildbreak.battle_runner.executable', return_value=sys.executable), patch('buildbreak.battle_runner.run_kane') as kane:
             with self.assertRaises(InvalidFault):
                 runner.run_battle(self.workspace, breaker='cached', cached_fault=path)
         kane.assert_not_called()
 
     def test_cache_generator_keeps_only_validated_proposals_and_deduplicates(self):
         invalid = {**proposal(), 'file': 'test_app.py'}
-        with patch('cache_faults.configuration', return_value=('fixture', 'gemini-fixture')), \
-                patch('cache_faults.propose_fault', side_effect=[proposal(), invalid, proposal()]) as provider, \
-                patch('cache_faults.time', new=SimpleNamespace(sleep=lambda seconds: None)):
+        with patch('buildbreak.cache_faults.configuration', return_value=('fixture', 'gemini-fixture')), \
+                patch('buildbreak.cache_faults.propose_fault', side_effect=[proposal(), invalid, proposal()]) as provider, \
+                patch('buildbreak.cache_faults.time', new=SimpleNamespace(sleep=lambda seconds: None)):
             results = cache_faults(self.workspace, sys.executable, count=3)
         self.assertEqual(provider.call_count, 3)
         self.assertEqual([row['accepted'] for row in results], [True, False, True])
@@ -113,8 +113,8 @@ class FaultCacheTests(unittest.TestCase):
         (folder / 'fault.json').write_text(json.dumps({'producer': 'gemini', 'fallback': False,
                                                       'model': 'gemini-fixture', 'patch': proposal()}))
         (folder / 'baseline-manifest.json').write_text(json.dumps(self.manifest))
-        with patch('cache_faults.configuration', side_effect=AssertionError('No key needed')), \
-                patch('cache_faults.propose_fault', side_effect=AssertionError('No API call')):
+        with patch('buildbreak.cache_faults.configuration', side_effect=AssertionError('No key needed')), \
+                patch('buildbreak.cache_faults.propose_fault', side_effect=AssertionError('No API call')):
             results = cache_faults(self.workspace, sys.executable, from_battle=battle)
         self.assertTrue(results[0]['accepted'])
         path = self.workspace / 'instance/fault-cache' / (results[0]['cache_id'] + '.json')

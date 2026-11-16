@@ -4,12 +4,12 @@ from pathlib import Path
 import re
 import zipfile
 
-from battle_history import save_details, update_outcome
-from fault_validator import protected
+from .battle_history import save_details, update_outcome
+from .fault_validator import protected
 
 
 def import_history(root):
-    from battle_runner import connect, digest, validate_pack, TEST
+    from .battle_runner import connect, digest, validate_pack, TEST
     root = Path(root).resolve()
     database = root / 'instance/arena.sqlite3'
     if not database.is_file():
@@ -82,4 +82,4 @@ def import_history(root):
 
 
 if __name__ == '__main__':
-    print(f'Enriched {import_history(Path(__file__).resolve().parent)} existing battle(s). No evidence changed.')
+    print(f'Enriched {import_history(Path(__file__).resolve().parents[1])} existing battle(s). No evidence changed.')

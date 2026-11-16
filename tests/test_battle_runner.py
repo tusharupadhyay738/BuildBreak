@@ -12,7 +12,7 @@ from unittest.mock import patch
 from contextlib import closing
 
 from app import create_app
-from battle_runner import (ROOT, TEST, apply_fault, check_protected, classify_kane,
+from buildbreak.battle_runner import (ROOT, TEST, apply_fault, check_protected, classify_kane,
                            connect, digest, event, record_run, snapshot, validate_pack,
                            validate_repair, RejectedRepair, battle_exit_code, run_battle, main, command,
                            failure_handoff, Server)
@@ -227,11 +227,11 @@ class BattleRunnerTests(unittest.TestCase):
         def fake_builder(codex, workspace, artifacts, failure, previous_test_failure=''):
             artifacts.mkdir(parents=True)
             return next(replies)
-        with patch('battle_runner.executable', return_value=sys.executable), \
-             patch('battle_runner.Server') as server, \
-             patch('battle_runner.command', return_value=SimpleNamespace(stdout='fixture-head', stderr='', returncode=0)), \
-             patch('battle_runner.run_kane', side_effect=[result('passed'), result('verification_failed'), result('passed')]) as kane, \
-             patch('battle_runner.builder_patch', side_effect=fake_builder) as builder:
+        with patch('buildbreak.battle_runner.executable', return_value=sys.executable), \
+             patch('buildbreak.battle_runner.Server') as server, \
+             patch('buildbreak.battle_runner.command', return_value=SimpleNamespace(stdout='fixture-head', stderr='', returncode=0)), \
+             patch('buildbreak.battle_runner.run_kane', side_effect=[result('passed'), result('verification_failed'), result('passed')]) as kane, \
+             patch('buildbreak.battle_runner.builder_patch', side_effect=fake_builder) as builder:
             server.return_value.url = 'http://127.0.0.1:1234'
             battle = run_battle(root=project, builder='codex', max_attempts=3)
         with connect(project / 'instance/arena.sqlite3') as db:
@@ -259,8 +259,8 @@ class BattleRunnerTests(unittest.TestCase):
                 with connect(database) as db:
                     db.execute('INSERT OR REPLACE INTO arena_sessions VALUES (?,?,?,?,?,?)',
                                ('fixture', 'now', state, 'baseline', 'fixture', 0))
-                with patch('battle_runner.ROOT', self.root), \
-                     patch('battle_runner.run_battle', return_value='fixture'), \
+                with patch('buildbreak.battle_runner.ROOT', self.root), \
+                     patch('buildbreak.battle_runner.run_battle', return_value='fixture'), \
                      patch('sys.argv', ['battle_runner.py']):
                     self.assertEqual(main(), expected)
         self.assertEqual(battle_exit_code('unknown'), 3)

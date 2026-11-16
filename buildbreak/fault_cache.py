@@ -3,7 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
-from fault_validator import InvalidFault, patch_source
+from .fault_validator import InvalidFault, patch_source
 
 VERSION = 1
 TEST_NAME = '.testmuai/tests/CheckoutConsistency_test.md'

@@ -30,13 +30,13 @@ Create a private `instance/arena-sources.json` with this structure, replacing ea
 From the repository root, explicitly import the first historical discount challenge:
 
 ```powershell
-.\.venv\Scripts\python.exe import_battle.py --sources instance/arena-sources.json
+.\.venv\Scripts\python.exe -m buildbreak.import_battle --sources instance/arena-sources.json
 .\.venv\Scripts\python.exe -m unittest -v
 .\.venv\Scripts\python.exe app.py
 ```
 
 ```sh
-.venv/bin/python import_battle.py --sources instance/arena-sources.json
+.venv/bin/python -m buildbreak.import_battle --sources instance/arena-sources.json
 .venv/bin/python -m unittest -v
 .venv/bin/python app.py
 ```
