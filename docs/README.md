@@ -9,6 +9,7 @@ evidence accounts describe what actually ran, including failures and limits.
 | Run a controlled or agent-driven battle | [Runner guide](guides/replayable-battles.md) |
 | Configure the default Gemini Breaker or replay a cache | [Gemini and cache setup](guides/gemini-breaker.md) |
 | See a genuine generated fault and repair | [First Gemini drill](evidence/gemini-first-battle.md) |
+| Inspect the live run using Gemini by default | [November 17 default-mode drill](evidence/gemini-default-battle.md) |
 | Inspect the successful cached replay | [Cached replay](evidence/cached-replay.md) |
 | Read a result without running agents | [Clearly labeled sample report](evidence/sample-report.md) |
 | Understand screenshot provenance | [Recorded screenshots](guides/evidence-screenshots.md) |

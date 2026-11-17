@@ -237,6 +237,7 @@ created locally; caches are not bundled in a clone.
 | Capability | Evidence and current limit |
 | --- | --- |
 | Generated pricing drill | [Real Gemini → Kane → Codex → Kane run](docs/evidence/gemini-first-battle.md), caught and repaired. |
+| Gemini default-mode drill | [November 17 live run](docs/evidence/gemini-default-battle.md): one rejection, second proposal accepted, repaired on attempt 1. Repeats the existing pricing case. |
 | Cached replay | [Real repeat execution](docs/evidence/cached-replay.md), repaired without a Gemini call during replay. Same fault, not another bug discovery. |
 | Quantity-boundary faults | Separate direct probe accepts 99, rejects 100 without cart changes, and removes at zero. Local/mocked tests pass; a live quantity battle is pending. |
 | Builder feedback comparison | [Requirements-only ablation option](docs/guides/builder-ablation.md), one attempt and excluded from scores. No live comparison yet. |
