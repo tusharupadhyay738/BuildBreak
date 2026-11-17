@@ -233,7 +233,7 @@ class BattleRunnerTests(unittest.TestCase):
              patch('buildbreak.battle_runner.run_kane', side_effect=[result('passed'), result('verification_failed'), result('passed')]) as kane, \
              patch('buildbreak.battle_runner.builder_patch', side_effect=fake_builder) as builder:
             server.return_value.url = 'http://127.0.0.1:1234'
-            battle = run_battle(root=project, builder='codex', max_attempts=3)
+            battle = run_battle(root=project, breaker='scripted', builder='codex', max_attempts=3)
         with connect(project / 'instance/arena.sqlite3') as db:
             state, attempts = db.execute('SELECT state,attempts FROM arena_sessions WHERE id=?', (battle,)).fetchone()
             rejected = db.execute("SELECT COUNT(*) FROM arena_events WHERE battle_id=? AND kind='builder_rejected'", (battle,)).fetchone()[0]

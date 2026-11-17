@@ -1,6 +1,6 @@
 # Gemini Breaker: local setup and first-stage limits
 
-This is an optional addition. Existing controlled-fault commands continue to work.
+Gemini is the default Breaker. Explicit controlled-fault commands continue to work.
 A real Gemini 3.5 Flash-Lite battle completed on November 14, 2026; see
 [the preserved-run account](../evidence/gemini-first-battle.md). Offline orchestration fixtures
 remain separate and are not evidence of a live workflow.
@@ -34,7 +34,7 @@ $env:GEMINI_MODEL = Read-Host 'Exact model ID verified as available on your free
 
 ```powershell
 $env:ARENA_GEMINI_FREE_TIER_CONFIRMED = '1'
-.\.venv\Scripts\python.exe -c "from gemini_breaker import configuration; configuration(); print('Local configuration present; no API request made.')"
+.\.venv\Scripts\python.exe -c "from buildbreak.gemini_breaker import configuration; configuration(); print('Local configuration present; no API request made.')"
 ```
 
 The confirmation is an operator assertion, not automatic billing verification.
@@ -44,8 +44,14 @@ variables into a separate Codex process. Launch the battle from that configured
 terminal:
 
 ```powershell
-.\.venv\Scripts\python.exe battle_runner.py --breaker gemini --builder codex --max-attempts 3
+.\.venv\Scripts\python.exe battle_runner.py --builder codex --max-attempts 3
 ```
+
+Missing configuration stops before any Kane call, with a tip to choose
+`--breaker cached --cached-fault <file>` or `--breaker scripted` explicitly.
+These modes make no Gemini API call; a full battle still uses Kane and the
+selected Builder. Invalid proposals receive a hint to try a different fault
+family, and an accepted Gemini proposal records the request/rejection counts.
 
 Kane and Codex must already be installed and authenticated. Kane consumes its
 own credits. If a CLI is installed but absent from the launching terminal's PATH,

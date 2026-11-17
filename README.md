@@ -1,10 +1,12 @@
+Gemini proposes a bug, Arena validates it, Kane CLI judges it, Codex repairs it. Built with Flask, SQLite, Codex and Kane CLI.
+
 # BuildBreak Arena
 
 ![BuildBreak Arena — challenge the test, repair the app, inspect the proof](docs/images/arena-banner.svg)
 
 <p align="center">
   <strong>Can your test catch the bug? Can your agent repair it? Show the evidence.</strong><br>
-  A local developer tool built with Flask, SQLite, Codex and Kane CLI. Gemini is an optional Breaker.
+  Gemini is the default Breaker. Cached and scripted fault selection remain available.
 </p>
 
 <p align="center">
@@ -186,8 +188,25 @@ You need local Chrome and your own installed, authenticated **Kane CLI and Codex
 CLI**, with available account allowances. The app-only quickstart needs neither.
 See [runner prerequisites and troubleshooting](docs/guides/replayable-battles.md).
 
-Start with the controlled fallback: one prepared fault and a Codex Builder.
-The runner starts its own isolated app; your main shop is preserved.
+Gemini is the default Breaker. With its free-tier configuration set, run:
+
+```powershell
+.\.venv\Scripts\python.exe battle_runner.py --builder codex --max-attempts 3
+```
+
+```sh
+.venv/bin/python battle_runner.py --builder codex --max-attempts 3
+```
+
+Missing Gemini configuration stops the run before Kane uses credits; it never
+silently switches modes. After configured Gemini proposals fail validation or
+API requests fail, the existing bounded process can use an explicitly recorded,
+validated controlled fallback. The history identifies the actual producer.
+
+For fault selection without a Gemini API call, use a validated local cache with
+`--breaker cached --cached-fault <file>`, or the scripted demo below. A full battle
+still needs Kane and, with `--builder codex`, Codex access. The runner starts its
+own isolated app; your main shop is preserved.
 
 ```powershell
 .\.venv\Scripts\python.exe battle_runner.py --breaker scripted --builder codex --max-attempts 3
@@ -204,10 +223,10 @@ recorded progress. The dashboard cannot launch agents or execute shell commands.
 | --- | --- |
 | `--breaker scripted` | Predictable prepared fault; demonstration fallback. |
 | `--breaker codex` | Codex chooses between two controlled faults. |
-| `--breaker gemini` | Gemini proposes a small logic fault; Arena validates it before acceptance. |
+| `--breaker gemini` (default) | Gemini proposes a small logic fault; Arena validates it before acceptance. Requires `GEMINI_API_KEY`. |
 | `--breaker cached --cached-fault <file>` | Revalidate and replay a local cached Gemini proposal without calling Gemini. |
 
-Gemini is optional. It requires an environment-only key, an available model and
+Gemini requires an environment-only key, an available model and
 explicit confirmation of free-tier access with billing disabled. Arena cannot
 verify billing status. See [Gemini setup and cache commands](docs/guides/gemini-breaker.md).
 Cached replay still consumes Kane/Codex allowances and needs a private cache

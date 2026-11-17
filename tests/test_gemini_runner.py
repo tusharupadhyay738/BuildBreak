@@ -1,5 +1,6 @@
 """Orchestration fixtures are synthetic, never reported as live agent battles."""
 import json
+import io
 import os
 from pathlib import Path
 import sys
@@ -36,9 +37,67 @@ class GeminiRunnerTests(unittest.TestCase):
         self.assertEqual(selection['producer'], 'gemini')
         self.assertEqual(selection['attempt'], 2)
         self.assertFalse(selection['fallback'])
-        self.assertEqual(len(messages), 1)
+        self.assertEqual([message[0] for message in messages], ['fault_rejected', 'fault_accepted'])
+        self.assertEqual(messages[-1][1],
+                         'Gemini proposals requested: 2; rejected by Arena: 1; accepted: 1.')
         self.assertEqual([call.args[0] for call in provider.call_args_list], [original, original])
         self.assertEqual((self.workspace / 'app.py').read_text(encoding='utf-8'), original)
+
+    def test_validator_rejection_hint_reaches_next_prompt_without_test_or_expected_values(self):
+        reason = 'Edit must stay inside one pricing or cart-quantity family.'
+        hint = 'Propose a different fault, preferably from the other family.'
+        with patch('buildbreak.gemini_breaker.generate_json', return_value=proposal()) as generate, \
+                patch('buildbreak.battle_runner.validate_fault', side_effect=[InvalidFault(reason), 'candidate']):
+            runner.select_gemini_fault(self.workspace, self.private, sys.executable,
+                                       self.manifest, lambda *args: None)
+        first, second = [call.args[0] for call in generate.call_args_list]
+        feedback = second.split('PREVIOUS VALIDATION: ', 1)[1].split('\nAPP:\n', 1)[0]
+        self.assertNotIn(hint, first)
+        self.assertEqual(feedback, reason + ' ' + hint)
+        self.assertNotIn('CheckoutConsistency', feedback)
+        self.assertNotIn('4497', feedback)
+        self.assertNotIn('4047', feedback)
+
+    def test_accepted_event_counts_actual_proposals_and_rejections(self):
+        for rejected in (0, 2):
+            with self.subTest(rejected=rejected):
+                messages = []
+                with patch('buildbreak.battle_runner.propose_fault', return_value=proposal()) as provider, \
+                        patch('buildbreak.battle_runner.validate_fault',
+                              side_effect=[InvalidFault('invalid')] * rejected + ['candidate']):
+                    runner.select_gemini_fault(self.workspace, self.private, sys.executable,
+                                               self.manifest, lambda *args: messages.append(args))
+                self.assertEqual(provider.call_count, rejected + 1)
+                self.assertEqual([kind for kind, _ in messages],
+                                 ['fault_rejected'] * rejected + ['fault_accepted'])
+                self.assertEqual(messages[-1][1], f'Gemini proposals requested: {rejected + 1}; '
+                                 f'rejected by Arena: {rejected}; accepted: 1.')
+
+    def test_default_breaker_checks_gemini_configuration_before_using_kane(self):
+        with patch('buildbreak.battle_runner.gemini_configuration', side_effect=GeminiError('missing')) as setup, \
+                patch('buildbreak.battle_runner.executable') as executable, \
+                patch('buildbreak.battle_runner.run_kane') as kane:
+            with self.assertRaisesRegex(GeminiError, 'missing'):
+                runner.run_battle(self.workspace)
+        setup.assert_called_once_with()
+        executable.assert_not_called()
+        kane.assert_not_called()
+
+    def test_cli_defaults_to_gemini_and_missing_key_exits_with_offline_tip(self):
+        from contextlib import redirect_stderr
+        output = io.StringIO()
+        with patch.dict(os.environ, {}, clear=True), \
+                patch('sys.argv', ['battle_runner.py']), \
+                patch('buildbreak.battle_runner.run_battle', wraps=runner.run_battle) as battle, \
+                patch('buildbreak.battle_runner.executable') as executable, redirect_stderr(output):
+            with self.assertRaises(SystemExit) as stopped:
+                runner.main()
+        self.assertEqual(stopped.exception.code, 1)
+        self.assertEqual(battle.call_args.kwargs['breaker'], 'gemini')
+        self.assertIn('GEMINI_API_KEY is not configured in this process.', output.getvalue())
+        self.assertIn('run with --breaker cached --cached-fault <file>, '
+                      'or --breaker scripted for an offline demo.', output.getvalue())
+        executable.assert_not_called()
 
     def test_three_api_errors_fall_back_with_honest_attribution(self):
         with patch('buildbreak.battle_runner.propose_fault', side_effect=GeminiError('HTTP 429')) as provider, \

@@ -415,6 +415,8 @@ def select_gemini_fault(workspace, private, python, manifest, notify):
             selection = {'producer': 'gemini', 'fallback': False, 'patch': proposal,
                          'attempt': attempt, 'rejected_attempts': attempts,
                          'model': os.environ.get('GEMINI_MODEL')}
+            notify('fault_accepted', f'Gemini proposals requested: {attempt}; '
+                   f'rejected by Arena: {len(attempts)}; accepted: 1.')
             return selection, candidate
         except (GeminiError, InvalidFault) as error:
             feedback = str(error)
@@ -425,6 +427,8 @@ def select_gemini_fault(workspace, private, python, manifest, notify):
                                  'retryable': error.retryable} if isinstance(error, GeminiError) else {})})
             notify('fault_rejected', f'Gemini proposal {attempt} was not accepted '
                    f'({attempts[-1]["kind"]}); isolated candidate discarded.')
+            if isinstance(error, InvalidFault):
+                feedback += ' Propose a different fault, preferably from the other family.'
             if isinstance(error, GeminiError):
                 if not error.retryable:
                     break
@@ -522,7 +526,7 @@ def battle_exit_code(state):
         return 1
     return 3
 
-def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3, cached_fault=None,
+def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cached_fault=None,
                omit_kane_feedback=False):
     if not 1 <= max_attempts <= MAX_ATTEMPTS:
         raise ValueError('Repair attempts must be between 1 and 3')
@@ -717,7 +721,8 @@ def run_battle(root=ROOT, breaker='scripted', builder='human', max_attempts=3, c
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--breaker', choices=['scripted', 'codex', 'gemini', 'cached'], default='scripted')
+    parser.add_argument('--breaker', choices=['scripted', 'codex', 'gemini', 'cached'], default='gemini',
+                        help='Default: gemini (needs GEMINI_API_KEY); use cached or scripted for offline fault selection')
     parser.add_argument('--cached-fault', type=Path, help='Validated Gemini cache JSON; requires --breaker cached')
     parser.add_argument('--builder', choices=['human', 'codex'], default='human')
     parser.add_argument('--max-attempts', type=int, choices=range(1, 4), default=3)
@@ -734,6 +739,9 @@ def main():
         state = row[0] if row else 'unknown'
         print('Final state: ' + state)
         return battle_exit_code(state)
+    except GeminiError as error:
+        parser.exit(1, f'Battle stopped: {error}\nTip: run with --breaker cached --cached-fault <file>, '
+                    'or --breaker scripted for an offline demo.\n')
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         parser.exit(1, f'Battle stopped: {error}\n')
 

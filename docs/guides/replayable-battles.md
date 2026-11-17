@@ -26,10 +26,14 @@ and sign in yourself; verify with `codex login status`. The local runner reuses
 that existing login. No API key is embedded or assumed. These commands can use
 your account credits/usage limits and need network access plus local Chrome.
 
-Use this command for an operator-controlled fault and human repair handoff:
+The default Breaker is Gemini and requires its environment-only API key,
+model and explicit free-tier confirmation; see [Gemini setup](gemini-breaker.md).
+Missing configuration stops without selecting a fallback.
+
+Use this explicit command for an operator-controlled fault and human repair handoff:
 
 ```powershell
-.\.venv\Scripts\python.exe battle_runner.py
+.\.venv\Scripts\python.exe battle_runner.py --breaker scripted
 ```
 
 Use separate noninteractive Codex sessions for Breaker selection and Builder
