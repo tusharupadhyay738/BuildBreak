@@ -13,6 +13,7 @@ evidence accounts describe what actually ran, including failures and limits.
 | Inspect the successful cached replay | [Cached replay](evidence/cached-replay.md) |
 | Read a result without running agents | [Clearly labeled sample report](evidence/sample-report.md) |
 | Understand screenshot provenance | [Recorded screenshots](guides/evidence-screenshots.md) |
+| Use the redesigned read-only console | [Dashboard design and filtering](guides/dashboard-design.md) |
 | Rehearse the presentation | [Demo guide](demo/demo-guide.md) |
 | Understand source and environment safeguards | [Execution boundary](guides/execution-boundary.md) |
 | Compare the Builder with and without feedback | [Unscored ablation](guides/builder-ablation.md) |
