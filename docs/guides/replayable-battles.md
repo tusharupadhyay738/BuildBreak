@@ -43,8 +43,20 @@ repair proposals:
 .\.venv\Scripts\python.exe battle_runner.py --breaker codex --builder codex --max-attempts 3
 ```
 
-Open `/arena` on the main app. It polls read-only `/arena/live` every three
-seconds. The local CLI is the only execution entry point; web requests cannot
+To watch Kane's real Chrome windows, add `--show-browser`:
+
+```powershell
+.\.venv\Scripts\python.exe battle_runner.py --breaker scripted --builder codex --max-attempts 3 --show-browser
+```
+
+Treat Kane's Chrome window as watch-only. Clicking **Start a new order** clears
+the session and invalidates the confirmation-reload check. Use a separate
+browser tab for the dashboard. Headless remains the default for unattended runs.
+Stage replay in the dashboard is playback of stored stages, not agent execution.
+
+Open `/arena` on the main app. The original console polls read-only `/arena/data`
+every fifteen seconds; `/arena/live` remains the server-rendered archive.
+The local CLI is the only execution entry point; web requests cannot
 start shell commands. A fresh installation has no battle rows until an actual
 run creates them. Existing historical first-battle imports still work.
 

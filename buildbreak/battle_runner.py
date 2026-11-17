@@ -288,12 +288,14 @@ def find_evidence_pack(events, workspace):
     return None, None, None
 
 
-def run_kane(workspace, artifacts, url, name, kane, timeout=1200):
+def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=False):
     artifacts.mkdir(parents=True, exist_ok=False)
     test_hash = digest(workspace / TEST)
     args = [kane, 'testmd', 'run', str(TEST), '--override-start-url', url,
-            '--target', 'desktop', '--headless', '--no-adaptive-heal',
+            '--target', 'desktop', '--no-adaptive-heal',
             '--timeout', '300', '--name', name, '--agent']
+    if not show_browser:
+        args.append('--headless')
     events = []
     started = time.monotonic()
     timed_out = False
@@ -527,7 +529,7 @@ def battle_exit_code(state):
     return 3
 
 def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cached_fault=None,
-               omit_kane_feedback=False):
+               omit_kane_feedback=False, show_browser=False):
     if not 1 <= max_attempts <= MAX_ATTEMPTS:
         raise ValueError('Repair attempts must be between 1 and 3')
     if breaker not in {'scripted', 'codex', 'gemini', 'cached'} or builder not in {'human', 'codex'}:
@@ -572,7 +574,8 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
         check_protected(workspace, manifest, allow_app=phase != 'baseline')
         event(database, battle, 'kane_started', f'Kane {phase} verification started.', 'verifying')
         result = run_kane(workspace, private / f'{phase}-{attempt}', server.url,
-                          'Arena' + battle.replace('-', '') + phase + str(attempt), kane)
+                          'Arena' + battle.replace('-', '') + phase + str(attempt), kane,
+                          **({'show_browser': True} if show_browser else {}))
         check_protected(workspace, manifest, allow_app=phase != 'baseline')
         record_run(database, battle, phase, attempt, result)
         event(database, battle, 'kane_finished', f'Kane {phase}: {result["result"]}.')
@@ -726,13 +729,15 @@ def main():
     parser.add_argument('--cached-fault', type=Path, help='Validated Gemini cache JSON; requires --breaker cached')
     parser.add_argument('--builder', choices=['human', 'codex'], default='human')
     parser.add_argument('--max-attempts', type=int, choices=range(1, 4), default=3)
+    parser.add_argument('--show-browser', action='store_true', help='Show Kane Chrome windows so you can watch the real test')
     parser.add_argument('--ablate-kane-feedback', action='store_true',
                         help='Unscored requirements-only comparison; forces one Codex repair attempt')
     args = parser.parse_args()
     try:
         battle = run_battle(breaker=args.breaker, builder=args.builder,
                             max_attempts=1 if args.ablate_kane_feedback else args.max_attempts,
-                            cached_fault=args.cached_fault, omit_kane_feedback=args.ablate_kane_feedback)
+                            cached_fault=args.cached_fault, omit_kane_feedback=args.ablate_kane_feedback,
+                            show_browser=args.show_browser)
         print('Battle record: ' + battle)
         with connect(ROOT / 'instance/arena.sqlite3') as db:
             row = db.execute('SELECT state FROM arena_sessions WHERE id=?', (battle,)).fetchone()
