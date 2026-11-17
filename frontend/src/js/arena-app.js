@@ -1,0 +1,653 @@
+/**
+ * BuildBreak Arena — Lightweight Vanilla JS Controller
+ *
+ * Binds read-only UI interactions:
+ * - Preview state switcher & top Battle History filter bar
+ * - Interactive recorded workflow stage inspector & step-replay
+ * - Side-by-side & interactive Overlay Wipe screenshot comparison
+ * - One-click copy feedback, keyboard shortcuts, and JSON export
+ */
+
+import {
+  readInjectedPayload,
+  getPreviewPayload,
+  filterBattles,
+  countBattlesByView,
+  resolveSelectedBattle,
+} from './arena-store.js';
+import { renderArenaDashboard, renderBattleFilterBar, escapeHtml } from './arena-renderer.js';
+import { createArenaSoundEngine } from './arena-sound.js';
+
+export function initArenaDashboard() {
+  const filterBarEl = document.getElementById('battle-filter-bar');
+  const mainEl = document.getElementById('arena-main');
+  const footerSourceEl = document.getElementById('footer-data-source');
+  const exportBtn = document.getElementById('export-json-btn');
+  const toastEl = document.getElementById('arena-toast');
+  const soundToggleBtn = document.getElementById('footer-sound-toggle');
+  const soundIconOff = document.getElementById('footer-sound-icon-off');
+  const soundIconOn = document.getElementById('footer-sound-icon-on');
+  const soundLabelEl = document.getElementById('footer-sound-label');
+  const schemaToggleBtn = document.getElementById('footer-schema-toggle');
+  const schemaModal = document.getElementById('schema-modal');
+  const schemaModalClose = document.getElementById('schema-modal-close');
+  const shortcutsToggleBtn = document.getElementById('footer-shortcuts-toggle');
+  const shortcutsModal = document.getElementById('shortcuts-modal');
+  const shortcutsModalClose = document.getElementById('shortcuts-modal-close');
+  const shotModal = document.getElementById('screenshot-modal');
+  const shotModalClose = document.getElementById('screenshot-modal-close');
+  const shotModalImg = document.getElementById('screenshot-modal-img');
+  const shotModalTitle = document.getElementById('screenshot-modal-title');
+  const shotModalSubtitle = document.getElementById('screenshot-modal-subtitle');
+
+  if (!mainEl) return;
+
+  const sound = createArenaSoundEngine();
+
+  function syncSoundToggleUi() {
+    if (!soundToggleBtn) return;
+    const active = sound.isEnabled();
+    soundToggleBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    if (soundLabelEl) soundLabelEl.textContent = active ? 'Sound: On' : 'Sound: Muted';
+    if (soundIconOff) soundIconOff.classList.toggle('hidden', active);
+    if (soundIconOn) soundIconOn.classList.toggle('hidden', !active);
+    soundToggleBtn.classList.toggle('text-slate-900', active);
+    soundToggleBtn.classList.toggle('font-medium', active);
+    soundToggleBtn.classList.toggle('text-slate-600', !active);
+  }
+
+  const state = {
+    payload: readInjectedPayload(),
+    activePreviewKey: readInjectedPayload().isSample ? 'historical_demo' : 'archive',
+    selectedBattleId: null,
+    outcomeFilter: 'all',
+    searchQuery: '',
+    selectedStageIndex: 0,
+    isReplayingStages: false,
+    screenshotCompareMode: 'side_by_side',
+    wipePercent: 50,
+  };
+
+  state.selectedBattleId = state.payload.activeBattleId || null;
+
+  let replayTimerId = null;
+  let toastTimerId = null;
+  let isDraggingWipe = false;
+  let lastRenderedBattleId = null;
+  let lastRenderedStageIndex = 0;
+
+  function showToast(message) {
+    if (!toastEl) return;
+    toastEl.textContent = message;
+    toastEl.classList.remove('hidden');
+    if (toastTimerId) clearTimeout(toastTimerId);
+    toastTimerId = setTimeout(() => {
+      toastEl.classList.add('hidden');
+    }, 1800);
+  }
+
+  function stopStageReplay() {
+    if (replayTimerId) {
+      clearInterval(replayTimerId);
+      replayTimerId = null;
+    }
+    state.isReplayingStages = false;
+  }
+
+  function getActiveBattle() {
+    const filteredBattles = filterBattles(state.payload.battles, {
+      outcomeFilter: state.outcomeFilter,
+      searchQuery: state.searchQuery,
+    });
+    return resolveSelectedBattle(
+      filteredBattles.length > 0 ? filteredBattles : state.payload.battles,
+      state.selectedBattleId,
+    );
+  }
+
+  function toggleStageReplay() {
+    if (state.isReplayingStages) {
+      stopStageReplay();
+      render();
+      return;
+    }
+
+    const activeBattle = getActiveBattle();
+    const stageCount = activeBattle?.stages?.length || 0;
+    if (stageCount <= 1) return;
+
+    state.isReplayingStages = true;
+    if (state.selectedStageIndex >= stageCount - 1) {
+      state.selectedStageIndex = 0;
+    }
+    render();
+
+    replayTimerId = setInterval(() => {
+      const currentBattle = getActiveBattle();
+      const count = currentBattle?.stages?.length || 0;
+      if (!currentBattle || state.selectedStageIndex >= count - 1) {
+        stopStageReplay();
+        render();
+        return;
+      }
+      state.selectedStageIndex += 1;
+      sound.play('nav');
+      render();
+    }, 1400);
+  }
+
+  function updateWipeVisuals(nextPct) {
+    const clamped = Math.max(0, Math.min(100, nextPct));
+    state.wipePercent = clamped;
+
+    const overlay = document.getElementById('arena-wipe-overlay');
+    const handle = document.getElementById('arena-wipe-handle');
+    const range = document.getElementById('arena-wipe-range');
+    const stage = document.getElementById('arena-wipe-stage');
+
+    if (overlay) {
+      overlay.style.clipPath = `inset(0 ${100 - clamped}% 0 0)`;
+    }
+    if (handle) {
+      handle.style.left = `${clamped}%`;
+    }
+    if (range instanceof HTMLInputElement) {
+      range.value = String(Math.round(clamped));
+    }
+    if (stage && stage.previousElementSibling) {
+      const pctLabel = stage.previousElementSibling.querySelector('.font-mono');
+      if (pctLabel) {
+        pctLabel.textContent = `Split position: ${Math.round(clamped)}%`;
+      }
+    }
+  }
+
+  function applyOutcomeFilter(nextFilter) {
+    stopStageReplay();
+    if (nextFilter !== state.outcomeFilter) {
+      sound.play('filter');
+    }
+    state.outcomeFilter = nextFilter;
+    const nextFiltered = filterBattles(state.payload.battles, {
+      outcomeFilter: state.outcomeFilter,
+      searchQuery: state.searchQuery,
+    });
+    if (nextFiltered.length > 0 && !nextFiltered.some((b) => b.id === state.selectedBattleId)) {
+      state.selectedBattleId = nextFiltered[0].id;
+      state.selectedStageIndex = 0;
+    }
+    render();
+  }
+
+  function selectBattle(nextId) {
+    if (!nextId || nextId === state.selectedBattleId) return;
+    stopStageReplay();
+    sound.play('nav');
+    state.selectedBattleId = nextId;
+    state.selectedStageIndex = 0;
+    render();
+  }
+
+  function render() {
+    const filteredBattles = filterBattles(state.payload.battles, {
+      outcomeFilter: state.outcomeFilter,
+      searchQuery: state.searchQuery,
+    });
+
+    const counts = countBattlesByView(state.payload.battles);
+
+    if (
+      filteredBattles.length > 0 &&
+      state.selectedBattleId &&
+      !filteredBattles.some((b) => b.id === state.selectedBattleId)
+    ) {
+      state.selectedBattleId = filteredBattles[0].id;
+      state.selectedStageIndex = 0;
+    }
+
+    const selectedBattle = resolveSelectedBattle(
+      filteredBattles.length > 0 ? filteredBattles : state.payload.battles,
+      state.selectedBattleId,
+    );
+
+    if (filterBarEl) {
+      filterBarEl.innerHTML = renderBattleFilterBar({
+        payload: state.payload,
+        outcomeFilter: state.outcomeFilter,
+        counts,
+        filteredCount: filteredBattles.length,
+      });
+    }
+
+    // Preserve active search input caret if user is currently typing
+    const activeEl = document.activeElement;
+    const wasSearchFocused = activeEl && activeEl.id === 'battle-search';
+    const selStart = wasSearchFocused ? activeEl.selectionStart : null;
+    const selEnd = wasSearchFocused ? activeEl.selectionEnd : null;
+
+    const activeBattleId = selectedBattle ? selectedBattle.id : null;
+    const sameBattle = activeBattleId !== null && activeBattleId === lastRenderedBattleId;
+    const prevStageIndex = sameBattle ? lastRenderedStageIndex : 0;
+
+    mainEl.innerHTML = renderArenaDashboard({
+      payload: state.payload,
+      activePreviewKey: state.activePreviewKey,
+      filteredBattles,
+      selectedBattle,
+      outcomeFilter: state.outcomeFilter,
+      searchQuery: state.searchQuery,
+      selectedStageIndex: state.selectedStageIndex,
+      prevStageIndex,
+      animateBattleEnter: !sameBattle,
+      isReplayingStages: state.isReplayingStages,
+      screenshotCompareMode: state.screenshotCompareMode,
+      wipePercent: state.wipePercent,
+    });
+
+    lastRenderedBattleId = activeBattleId;
+    lastRenderedStageIndex = state.selectedStageIndex;
+
+    const progressFill = document.getElementById('workflow-stage-progress-fill');
+    if (progressFill) {
+      const targetScale = progressFill.getAttribute('data-target-scale');
+      if (targetScale) {
+        // Force style flush so CSS transform transition interpolates from prevStageIndex
+        void progressFill.offsetWidth;
+        requestAnimationFrame(() => {
+          progressFill.style.transform = `scaleX(${targetScale})`;
+        });
+      }
+    }
+
+    if (footerSourceEl) {
+      footerSourceEl.textContent = `Source: ${state.payload.dataSourceLabel || 'BuildBreak Arena dataset'}`;
+    }
+
+    // Attach resilient image fallback handlers (Zero-Broken-Image Policy)
+    const imgs = mainEl.querySelectorAll('img[data-fallback-path]');
+    imgs.forEach((img) => {
+      img.addEventListener('error', () => {
+        const pathLabel = img.getAttribute('data-fallback-path') || 'artifact.jpg';
+        const fallback = document.createElement('div');
+        fallback.className =
+          'w-full aspect-[4/3] rounded border border-amber-200 bg-amber-50/60 flex flex-col items-center justify-center p-4 text-center gap-2';
+        fallback.innerHTML = `
+          <span class="text-xs font-semibold text-amber-900">Capture preview unavailable</span>
+          <code class="text-[11px] font-mono text-slate-600">${escapeHtml(pathLabel)}</code>
+        `;
+        img.replaceWith(fallback);
+      });
+    });
+
+    if (wasSearchFocused) {
+      const searchInput = document.getElementById('battle-search');
+      if (searchInput) {
+        searchInput.focus();
+        if (typeof selStart === 'number' && typeof selEnd === 'number') {
+          searchInput.setSelectionRange(selStart, selEnd);
+        }
+      }
+    }
+  }
+
+  function openScreenshotModal({ src, title, subtitle, alt }) {
+    if (!shotModal || !shotModalImg) return;
+    shotModalImg.src = src;
+    shotModalImg.alt = alt || title || 'Recorded Kane CLI screenshot';
+    if (shotModalTitle) shotModalTitle.textContent = title || 'Recorded capture preview';
+    if (shotModalSubtitle) shotModalSubtitle.textContent = subtitle || '';
+    shotModal.classList.remove('hidden');
+  }
+
+  function closeScreenshotModal() {
+    if (!shotModal || !shotModalImg) return;
+    shotModal.classList.add('hidden');
+    shotModalImg.src = '';
+  }
+
+  function openSchemaModal() {
+    if (schemaModal) schemaModal.classList.remove('hidden');
+  }
+
+  function closeSchemaModal() {
+    if (schemaModal) schemaModal.classList.add('hidden');
+  }
+
+  function openShortcutsModal() {
+    if (shortcutsModal) shortcutsModal.classList.remove('hidden');
+  }
+
+  function closeShortcutsModal() {
+    if (shortcutsModal) shortcutsModal.classList.add('hidden');
+  }
+
+  if (filterBarEl) {
+    filterBarEl.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const filterBtn = target.closest('[data-outcome-filter]');
+      if (filterBtn && !filterBtn.hasAttribute('disabled')) {
+        const nextFilter = filterBtn.getAttribute('data-outcome-filter') || 'all';
+        applyOutcomeFilter(nextFilter);
+      }
+    });
+  }
+
+  // Event delegation on main container
+  mainEl.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const copyBtn = target.closest('[data-copy-text]');
+    if (copyBtn) {
+      const text = copyBtn.getAttribute('data-copy-text');
+      if (text && navigator.clipboard) {
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            sound.play('copy');
+            showToast(`Copied "${text}"`);
+          })
+          .catch(() => showToast('Copy unavailable in this browser context'));
+      }
+      return;
+    }
+
+    const previewBtn = target.closest('[data-preview-state]');
+    if (previewBtn) {
+      const nextKey = previewBtn.getAttribute('data-preview-state');
+      if (nextKey) {
+        stopStageReplay();
+        sound.play(nextKey === 'infra_error' || nextKey === 'missing_evidence' ? 'error' : 'filter');
+        state.activePreviewKey = nextKey;
+        state.payload = getPreviewPayload(nextKey);
+        state.selectedBattleId = state.payload.activeBattleId || null;
+        state.selectedStageIndex = 0;
+        state.outcomeFilter = 'all';
+        state.searchQuery = '';
+        render();
+      }
+      return;
+    }
+
+    const filterBtn = target.closest('[data-outcome-filter]');
+    if (filterBtn) {
+      const nextFilter = filterBtn.getAttribute('data-outcome-filter') || 'all';
+      applyOutcomeFilter(nextFilter);
+      return;
+    }
+
+    const stageBtn = target.closest('[data-stage-index]');
+    if (stageBtn) {
+      stopStageReplay();
+      const idx = Number(stageBtn.getAttribute('data-stage-index'));
+      if (!Number.isNaN(idx)) {
+        sound.play('nav');
+        state.selectedStageIndex = idx;
+        render();
+      }
+      return;
+    }
+
+    const stageNavBtn = target.closest('[data-stage-nav]');
+    if (stageNavBtn && !stageNavBtn.hasAttribute('disabled')) {
+      stopStageReplay();
+      const dir = stageNavBtn.getAttribute('data-stage-nav');
+      const activeBattle = getActiveBattle();
+      const maxIdx = (activeBattle?.stages?.length || 1) - 1;
+      if (dir === 'prev') {
+        state.selectedStageIndex = Math.max(0, state.selectedStageIndex - 1);
+      } else if (dir === 'next') {
+        state.selectedStageIndex = Math.min(maxIdx, state.selectedStageIndex + 1);
+      }
+      sound.play('nav');
+      render();
+      return;
+    }
+
+    const replayBtn = target.closest('[data-stage-replay]');
+    if (replayBtn) {
+      sound.play('nav');
+      toggleStageReplay();
+      return;
+    }
+
+    const compareBtn = target.closest('[data-compare-mode]');
+    if (compareBtn) {
+      const nextMode = compareBtn.getAttribute('data-compare-mode');
+      if (nextMode === 'side_by_side' || nextMode === 'wipe') {
+        if (nextMode !== state.screenshotCompareMode) {
+          sound.play('filter');
+        }
+        state.screenshotCompareMode = nextMode;
+        render();
+      }
+      return;
+    }
+
+    const actionBtn = target.closest('[data-action]');
+    if (actionBtn) {
+      const action = actionBtn.getAttribute('data-action');
+      if (action === 'clear-filters') {
+        sound.play('filter');
+        state.outcomeFilter = 'all';
+        state.searchQuery = '';
+        render();
+      } else if (action === 'reload-payload') {
+        stopStageReplay();
+        sound.play('filter');
+        state.activePreviewKey = 'archive';
+        state.payload = readInjectedPayload();
+        state.selectedBattleId = state.payload.activeBattleId || null;
+        state.selectedStageIndex = 0;
+        render();
+      }
+      return;
+    }
+
+    const zoomBtn = target.closest('[data-zoom-src]');
+    if (zoomBtn) {
+      sound.play('nav');
+      openScreenshotModal({
+        src: zoomBtn.getAttribute('data-zoom-src') || '',
+        title: zoomBtn.getAttribute('data-zoom-title') || '',
+        subtitle: zoomBtn.getAttribute('data-zoom-subtitle') || '',
+        alt: zoomBtn.getAttribute('data-zoom-alt') || '',
+      });
+      return;
+    }
+
+    const battleRow = target.closest('[data-battle-row]');
+    if (battleRow) {
+      const nextId = battleRow.getAttribute('data-battle-row');
+      selectBattle(nextId);
+    }
+  });
+
+  // Interactive pointer scrubbing on wipe stage
+  mainEl.addEventListener('pointerdown', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const stage = target.closest('#arena-wipe-stage');
+    if (!stage) return;
+    isDraggingWipe = true;
+    const rect = stage.getBoundingClientRect();
+    const pct = ((event.clientX - rect.left) / rect.width) * 100;
+    updateWipeVisuals(pct);
+  });
+
+  window.addEventListener('pointermove', (event) => {
+    if (!isDraggingWipe) return;
+    const stage = document.getElementById('arena-wipe-stage');
+    if (!stage) {
+      isDraggingWipe = false;
+      return;
+    }
+    const rect = stage.getBoundingClientRect();
+    const pct = ((event.clientX - rect.left) / rect.width) * 100;
+    updateWipeVisuals(pct);
+  });
+
+  window.addEventListener('pointerup', () => {
+    isDraggingWipe = false;
+  });
+
+  mainEl.addEventListener('keydown', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      const battleRow = target.closest('[data-battle-row]');
+      if (battleRow) {
+        event.preventDefault();
+        const nextId = battleRow.getAttribute('data-battle-row');
+        selectBattle(nextId);
+      }
+    }
+  });
+
+  mainEl.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.id === 'battle-search') {
+      state.searchQuery = target.value;
+      render();
+    } else if (target.id === 'arena-wipe-range') {
+      updateWipeVisuals(Number(target.value));
+    }
+  });
+
+  // Top bar read-only Export JSON action
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(state.payload, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `buildbreak-arena-${state.activePreviewKey}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      sound.play('copy');
+      showToast('Exported JSON snapshot');
+    });
+  }
+
+  // Footer sound toggle (default muted)
+  if (soundToggleBtn) {
+    soundToggleBtn.addEventListener('click', () => {
+      sound.toggle();
+      syncSoundToggleUi();
+    });
+  }
+  syncSoundToggleUi();
+
+  // Top nav links soft sound feedback
+  document.querySelectorAll('header nav a').forEach((navLink) => {
+    navLink.addEventListener('click', () => sound.play('nav'));
+  });
+
+  // Modals
+  if (shotModalClose) shotModalClose.addEventListener('click', closeScreenshotModal);
+  if (shotModal) {
+    shotModal.addEventListener('click', (e) => {
+      if (e.target === shotModal) closeScreenshotModal();
+    });
+  }
+
+  if (schemaToggleBtn) schemaToggleBtn.addEventListener('click', openSchemaModal);
+  if (schemaModalClose) schemaModalClose.addEventListener('click', closeSchemaModal);
+  if (schemaModal) {
+    schemaModal.addEventListener('click', (e) => {
+      if (e.target === schemaModal) closeSchemaModal();
+    });
+  }
+
+  if (shortcutsToggleBtn) shortcutsToggleBtn.addEventListener('click', openShortcutsModal);
+  if (shortcutsModalClose) shortcutsModalClose.addEventListener('click', closeShortcutsModal);
+  if (shortcutsModal) {
+    shortcutsModal.addEventListener('click', (e) => {
+      if (e.target === shortcutsModal) closeShortcutsModal();
+    });
+  }
+
+  // Global developer keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeScreenshotModal();
+      closeSchemaModal();
+      closeShortcutsModal();
+      return;
+    }
+
+    const active = document.activeElement;
+    const isTyping =
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement ||
+      active instanceof HTMLSelectElement;
+
+    if (isTyping) return;
+
+    if (e.key === '?') {
+      e.preventDefault();
+      if (shortcutsModal && shortcutsModal.classList.contains('hidden')) {
+        openShortcutsModal();
+      } else {
+        closeShortcutsModal();
+      }
+      return;
+    }
+
+    if (e.key === '/') {
+      const searchInput = document.getElementById('battle-search');
+      if (searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+      }
+      return;
+    }
+
+    if (state.payload.status !== 'ready') return;
+
+    if (e.key === '1') applyOutcomeFilter('all');
+    else if (e.key === '2') applyOutcomeFilter('success');
+    else if (e.key === '3') applyOutcomeFilter('repair_failed');
+    else if (e.key === '4') applyOutcomeFilter('pending_inspection');
+    else if (e.key === '[' || e.key === ']') {
+      const activeBattle = getActiveBattle();
+      const maxIdx = (activeBattle?.stages?.length || 1) - 1;
+      stopStageReplay();
+      state.selectedStageIndex =
+        e.key === '['
+          ? Math.max(0, state.selectedStageIndex - 1)
+          : Math.min(maxIdx, state.selectedStageIndex + 1);
+      sound.play('nav');
+      render();
+    } else if (e.key === 'j' || e.key === 'k') {
+      const filteredBattles = filterBattles(state.payload.battles, {
+        outcomeFilter: state.outcomeFilter,
+        searchQuery: state.searchQuery,
+      });
+      if (filteredBattles.length <= 1) return;
+      const currentIdx = filteredBattles.findIndex((b) => b.id === state.selectedBattleId);
+      const nextIdx =
+        e.key === 'j'
+          ? (currentIdx + 1) % filteredBattles.length
+          : (currentIdx - 1 + filteredBattles.length) % filteredBattles.length;
+      selectBattle(filteredBattles[nextIdx].id);
+    }
+  });
+
+  document.addEventListener('arena:archive-update', (event) => {
+    const payload = event.detail;
+    const script = document.getElementById('arena-payload');
+    if (script) script.textContent = JSON.stringify(payload);
+    if (state.activePreviewKey !== 'archive') return;
+    if (document.activeElement?.id === 'battle-search' || state.isReplayingStages || isDraggingWipe) return;
+    state.payload = payload;
+    render();
+  });
+  render();
+}

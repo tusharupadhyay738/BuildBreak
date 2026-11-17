@@ -1,27 +1,47 @@
-# Dashboard design integration
+# Original AI Studio console integration
 
-The light console presentation adapts the user's Google AI Studio ZIP design
-to the existing Flask/Jinja views. Its sample history, sample screenshot images,
-environment templates, build scripts and sound effects were not imported.
-There is no new frontend build step, external font request or API dependency.
+The dashboard uses the original interface from the user-supplied
+`buildbreak-arena.zip`. The source HTML, CSS and sound engine are preserved;
+all renderer class attributes and original controls remain. Data bindings
+replace hard-coded SAMPLE labels when showing genuine archive records.
 
-Run `python app.py` and open `/arena`. Search and state filters narrow the ten
-most recent history rows; selecting a row opens its own recorded verification.
-Filters do not change the selected battle or the measurement denominators.
-The existing three-second polling preserves filters and open disclosures and
-keeps the last rendered records if refresh fails. Edits to search controls are
-not interrupted by polling. Full-image links use the existing hash-bound image
-endpoint; raw evidence remains private.
+The original stage inspector/replay, table search and filters, side-by-side
+and Overlay Wipe comparison, screenshot modal, copy, JSON export, keyboard
+shortcuts, optional sound and integration-contract modal remain available.
+Stage replay animates recorded steps; it never starts agents or replays Kane.
 
-Empty workspaces link to the genuine November 17 recorded report on GitHub.
-That link requires internet access and does not seed the local database.
-This is a read-only console: it does not launch battles, fix code, expose keys
-or export raw logs. Screenshots are recorded viewports, not a live stream.
+`/arena` injects a sanitized payload from local SQLite records. `/arena/data`
+refreshes that archive without substituting samples when a request fails.
+Export JSON downloads that sanitized view, not raw logs, cookies, proposals,
+source snapshots or file paths. Unknown values and identifiers stay unrecorded.
+Expected comparison values come from the same battle's verified healthy Kane
+observations; missing pre-repair values are not inferred from direct checks.
 
-The protected checkout test, runner, independent checks and main shop source
-were not changed for this redesign. Dashboard source is included in battle
-snapshot bindings, so a cache bound to an older dashboard snapshot can be
-rejected. Generate/revalidate a new cache through the normal workflow; do not
-rewrite cache hashes to bypass the binding.
+The original Historical Demo, Empty, Loading, Missing Evidence and Infra Error
+previews remain separate SAMPLE states. Their generated screenshots and values
+are design examples, never live-run evidence. An empty fresh installation
+opens the empty real archive; sample data is shown only when a preview is chosen.
 
-This UI adaptation does not constitute a new live Kane verification.
+## Run and rebuild
+
+Normal use still needs only the Python dependencies: `python app.py` then
+open `/arena`. Compiled frontend assets are included. Google Fonts requests
+are preserved from the original design and fall back to system fonts offline.
+
+Only when modifying the frontend sources:
+
+```powershell
+npm.cmd --prefix frontend ci --ignore-scripts
+npm.cmd --prefix frontend run build
+.\.venv\Scripts\python.exe frontend/export_flask.py
+```
+
+macOS/Linux: use `npm` in place of `npm.cmd` and `.venv/bin/python`.
+No Gemini API or paid service is needed for the dashboard. The Vite/Tailwind
+build dependencies replace the ZIP's unused React/Gemini/server dependencies.
+
+The original server-rendered archive remains as a no-JavaScript fallback and
+at `/arena/live`. Battle snapshots include the payload adapter, so existing
+cache bindings can legitimately become stale; do not rewrite cache hashes.
+The shop source and protected Kane checkout test remain unchanged. No new
+live Kane result is claimed for this UI integration.

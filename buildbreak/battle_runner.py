@@ -98,7 +98,7 @@ def snapshot(source, destination):
     """Explicit allowlist: never copy credentials, evidence, databases or history."""
     files = ['app.py', 'arena.py', 'test_app.py', 'test_arena.py',
              'buildbreak/__init__.py', 'buildbreak/arena.py', 'buildbreak/import_battle.py',
-             'buildbreak/battle_history.py', 'buildbreak/evidence_images.py',
+             'buildbreak/battle_history.py', 'buildbreak/evidence_images.py', 'buildbreak/console_payload.py',
              'requirements.txt', TEST.as_posix()]
     for folder in ('templates', 'static'):
         files += [p.relative_to(source).as_posix() for p in (source / folder).rglob('*') if p.is_file()]

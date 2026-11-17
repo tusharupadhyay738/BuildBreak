@@ -7,6 +7,7 @@ from flask import render_template, request, abort, url_for
 from datetime import datetime, timedelta, timezone
 from .battle_history import decorate, summarize
 from .evidence_images import screenshot_for
+from .console_payload import console_payload
 
 STATE_LABELS = {
     'prepared': 'Battle prepared', 'verifying': 'Kane is checking',
@@ -116,6 +117,14 @@ def register_arena(app):
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    @app.get('/arena/data')
+    def arena_data():
+        sessions = live_battles()
+        selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
+        response = app.json.response(console_payload(sessions, app.config['ARENA_ARTIFACTS'], selected, display_time))
+        response.headers.update({'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
+        return response
+
     @app.get("/arena")
     def arena():
         with closing(sqlite3.connect(app.config["ARENA_DATABASE"])) as connection:
@@ -133,4 +142,5 @@ def register_arena(app):
         selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
         attach_screenshots(sessions, selected)
         return render_template("arena.html", battle=battle, runs=runs, evidence=evidence, sessions=sessions,
-                               selected_id=selected, scores=summarize(sessions))
+                               selected_id=selected, scores=summarize(sessions),
+                               console_payload=console_payload(sessions, app.config['ARENA_ARTIFACTS'], selected, display_time))

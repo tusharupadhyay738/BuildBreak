@@ -1,2 +1,6 @@
 # Keep browser acceptance definitions byte-stable across Windows and Unix clones.
 /.testmuai/tests/*_test.md text eol=lf
+# Preserve the original UI source files recorded in frontend/ORIGINAL.md.
+/frontend/index.html text eol=lf
+/frontend/src/index.css text eol=lf
+/frontend/src/js/arena-sound.js text eol=lf

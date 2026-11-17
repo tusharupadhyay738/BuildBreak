@@ -1,20 +1,250 @@
-<!doctype html>
+{% raw %}<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="Inspect real BuildBreak battles, Kane verification and recorded repair evidence."><title>Battle console · BuildBreak Arena</title><link rel="stylesheet" href="{{ url_for('static', filename='arena.css') }}"><script defer src="{{ url_for('static', filename='arena.js') }}"></script></head>
-<body>
-<a class="skip-link" href="#live-battles">Skip to battle results</a>
-<header class="app-header"><nav class="top-nav" aria-label="Main navigation"><a class="brand" href="/arena"><span class="brand-mark" aria-hidden="true">B<span>↗</span></span>BuildBreak <span class="brand-light">Arena</span></a><div class="nav-links"><a href="#live-battles">Overview</a><a href="#history">History</a><a href="#verification">Verification</a></div><a class="shop-link" href="/">Open BreakShop ↗</a></nav></header>
-<main>
-<div class="workspace-bar"><span><i aria-hidden="true"></i> LOCAL WORKSPACE</span><span>SQLite records <b>·</b> Read-only console</span></div>
-<header class="hero"><div><p class="eyebrow">CHALLENGE THE TEST. INSPECT THE PROOF.</p><h1>Battle console<span class="heading-dot">.</span></h1><p>Follow a fault from validation to a Kane-verified repair.</p></div><a class="button secondary" href="https://github.com/tusharupadhyay738/BuildBreak/blob/main/docs/evidence/gemini-default-battle.md" target="_blank" rel="noopener noreferrer">Read a verified example ↗</a></header>
-<section class="roles" aria-label="How BuildBreak works"><article><span class="role-icon">01</span><div><h2>Gemini proposes</h2><p>Arena validates one bounded fault.</p></div></article><article><span class="role-icon">02</span><div><h2>Kane judges</h2><p>The unchanged browser test checks it.</p></div></article><article><span class="role-icon">03</span><div><h2>Codex repairs</h2><p>Kane checks the proposed repair again.</p></div></article></section>
-<div class="refresh-status"><span class="pulse" aria-hidden="true"></span><span id="connection-status" role="status">Showing recorded results · auto-refresh on</span><span class="read-only">No agent execution from this page</span></div>
-<section id="live-battles" aria-label="Runner battle history">{% include 'live_battles.html' %}</section>
-<details class="historical"><summary>Earlier human-triggered experiment</summary>
-{% if not battle %}<p>No historical battle has been imported.</p>{% else %}
-<p class="label">Historical - Human-triggered</p><h2>Discount regression</h2><p>A deliberately seeded challenge, repaired by the Builder after a human-requested Kane test.</p>
-<ol class="timeline"><li><h3>Baseline</h3><code>{{ battle.baseline }}</code></li><li><h3>Deliberately seeded fault</h3><p>{{ battle.fault }}</p></li>
-{% for run in runs %}{% if run.phase == 'after' %}<li><h3>Builder repair</h3><p>{{ battle.repair }}</p></li>{% endif %}<li><h3>Kane {{ 'before repair' if run.phase == 'before' else 'after repair' }} - {{ run.result }}</h3><p>Execution <code>{{ run.execution_id }}</code></p><p>Recorded against port 5001.</p></li>{% endfor %}</ol>
-<h2>Expected versus actual</h2><div class="table-wrap"><table><thead><tr><th>Recorded run</th><th>Subtotal</th><th>Expected total</th><th>Actual total</th></tr></thead><tbody>{% for run in runs %}<tr><th>{{ 'Before repair' if run.phase == 'before' else 'After repair' }}</th><td>{{ run.subtotal|money }}</td><td>{{ run.expected|money }}</td><td>{{ run.actual|money }}</td></tr>{% endfor %}</tbody></table></div>
-<h2>Current evidence availability</h2><p>Local file availability is checked separately from the recorded run results.</p>{% for run in runs %}<p><strong>{{ 'Before repair' if run.phase == 'before' else 'After repair' }}</strong> - Report: {{ evidence[run.phase].report }} - Pack: {{ evidence[run.phase].pack }}</p>{% endfor %}
-<h2>What was verified</h2><p>The unchanged test asks for quantity 2, SAVE10, and a final total equal to the subtotal minus 10%. The runs exercised two Arena T-shirts. The action sequences differed: before repair Kane set quantity before adding; after repair it added first, then updated quantity. The failed run compared percentages; the passing run checked the difference in cents.</p><p>The failed report's &quot;undiscounted&quot; wording is inaccurate: its recorded total shows a 5% discount.</p><p>Verification covers this discount flow. Checkout, saved orders, duplicate-order protection, other cart combinations, and full-app correctness are outside this browser result's scope.</p>{% endif %}</details><footer>BuildBreak Arena · Real browser evidence. Explicit limits. No simulated victories.</footer></main></body></html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BuildBreak Arena — Fault &amp; Repair Inspection Console</title>
+    <meta
+      name="description"
+      content="Read-only developer console for inspecting BuildBreak Arena fault-injection battles, workflow timelines, expected vs. actual assertions, and recorded Kane CLI screenshots."
+    />
+    <meta property="og:title" content="BuildBreak Arena — Fault &amp; Repair Inspection Console" />
+    <meta
+      property="og:description"
+      content="Read-only developer console for inspecting BuildBreak Arena fault-injection battles, workflow timelines, and recorded Kane CLI evidence."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&family=Public+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script type="module" crossorigin src="/static/console/assets/index-BgzQKzPj.js"></script>
+    <link rel="stylesheet" crossorigin href="/static/console/assets/index-B9TwVyn5.css">
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-slate-900 selection:text-white">
+    <!--
+      Flask + Jinja integration hook:
+      In production, Jinja can inject the SQLite-backed payload directly into this JSON script tag:
+      <script id="arena-payload" type="application/json">{{ payload | tojson }}</script>
+    -->
+    <script id="arena-payload" type="application/json">{% endraw %}{{ console_payload | tojson }}{% raw %}</script>
+
+    <div id="arena-app" class="min-h-screen flex flex-col">
+      <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-slate-200">
+        <div class="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
+          <a
+            href="#overview"
+            class="font-display text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 rounded"
+          >
+            BuildBreak Arena
+          </a>
+
+          <nav aria-label="Console sections" class="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
+            <a href="#overview" class="hover:text-slate-900 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0">Overview</a>
+            <a href="#history" class="hover:text-slate-900 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0">History</a>
+            <a href="#comparison" class="hover:text-slate-900 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0">Comparison</a>
+            <a href="#verification" class="hover:text-slate-900 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0">Verification</a>
+          </nav>
+
+          <div class="flex items-center shrink-0">
+            <button
+              id="export-json-btn"
+              type="button"
+              class="px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-md hover:bg-slate-800 active:bg-slate-950 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+            >
+              Export JSON
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div id="battle-filter-bar" class="bg-white border-b border-slate-200"></div>
+
+      <main id="arena-main" class="flex-1 max-w-[1280px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        <!-- Rendered dynamically by lightweight vanilla JS (src/js/arena-renderer.js) -->
+        <noscript>
+          <div class="bg-white border border-slate-200 rounded-lg p-6 text-sm text-slate-700">
+            JavaScript is required to render interactive battle inspection controls, or render server-side via Jinja templates.
+          </div>
+        </noscript>
+      </main>
+
+      <footer class="border-t border-slate-200 bg-white mt-auto">
+        <div class="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-500">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-medium text-slate-700">BuildBreak Arena</span>
+            <span aria-hidden="true">&middot;</span>
+            <span>Read-only fault inspection console</span>
+            <span aria-hidden="true">&middot;</span>
+            <span id="footer-data-source">Source: SAMPLE historical dataset</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-4">
+            <a href="#overview" class="hover:text-slate-900 transition-colors whitespace-nowrap">Back to top</a>
+            <button
+              id="footer-sound-toggle"
+              type="button"
+              aria-pressed="false"
+              class="inline-flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 rounded"
+            >
+              <svg id="footer-sound-icon-off" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.5 4.75L5.75 7.75H3.25v4.5h2.5l3.75 3V4.75z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 8l3.5 4m0-4L13 12"/>
+              </svg>
+              <svg id="footer-sound-icon-on" class="w-3.5 h-3.5 shrink-0 hidden text-slate-900" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.5 4.75L5.75 7.75H3.25v4.5h2.5l3.75 3V4.75z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7.5a3.75 3.75 0 010 5m2.25-7.25a7 7 0 010 9.5"/>
+              </svg>
+              <span id="footer-sound-label">Sound: Muted</span>
+            </button>
+            <button
+              id="footer-shortcuts-toggle"
+              type="button"
+              class="text-slate-600 hover:text-slate-900 underline underline-offset-2 transition-colors whitespace-nowrap"
+            >
+              Shortcuts (?)
+            </button>
+            <button
+              id="footer-schema-toggle"
+              type="button"
+              class="text-slate-600 hover:text-slate-900 underline underline-offset-2 transition-colors whitespace-nowrap"
+            >
+              Jinja / JSON integration contract
+            </button>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Subtle Copy Feedback Toast -->
+    <div
+      id="arena-toast"
+      role="status"
+      aria-live="polite"
+      class="fixed bottom-5 right-5 z-50 hidden px-3.5 py-2 rounded-md bg-slate-900 text-white text-xs font-medium shadow-lg border border-slate-700"
+    ></div>
+
+    <!-- Screenshot Lightbox Dialog -->
+    <div
+      id="screenshot-modal"
+      class="fixed inset-0 z-50 hidden bg-slate-950/75 backdrop-blur-xs p-4 sm:p-8 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="screenshot-modal-title"
+    >
+      <div class="bg-white border border-slate-200 rounded-lg max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-xl">
+        <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <h3 id="screenshot-modal-title" class="font-display text-sm font-semibold text-slate-900 truncate">
+              Recorded capture preview
+            </h3>
+            <p id="screenshot-modal-subtitle" class="text-xs text-slate-500 truncate mt-0.5"></p>
+          </div>
+          <button
+            id="screenshot-modal-close"
+            type="button"
+            class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+          >
+            Close
+          </button>
+        </div>
+        <div class="p-4 sm:p-6 bg-slate-100 overflow-auto flex items-center justify-center">
+          <img
+            id="screenshot-modal-img"
+            src=""
+            alt=""
+            referrerpolicy="no-referrer"
+            class="max-w-full max-h-[72vh] rounded border border-slate-200 bg-white object-contain"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div
+      id="shortcuts-modal"
+      class="fixed inset-0 z-50 hidden bg-slate-950/60 backdrop-blur-xs p-4 sm:p-8 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shortcuts-modal-title"
+    >
+      <div class="bg-white border border-slate-200 rounded-lg max-w-md w-full overflow-hidden shadow-xl">
+        <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between gap-4">
+          <h3 id="shortcuts-modal-title" class="font-display text-sm font-semibold text-slate-900">
+            Console Keyboard Shortcuts
+          </h3>
+          <button
+            id="shortcuts-modal-close"
+            type="button"
+            class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+          >
+            Close
+          </button>
+        </div>
+        <dl class="p-5 divide-y divide-slate-200 text-xs">
+          <div class="py-2.5 flex items-center justify-between gap-4">
+            <dt class="text-slate-600">Next / previous battle</dt>
+            <dd class="font-mono text-slate-900">J / K</dd>
+          </div>
+          <div class="py-2.5 flex items-center justify-between gap-4">
+            <dt class="text-slate-600">Previous / next workflow stage</dt>
+            <dd class="font-mono text-slate-900">[ / ]</dd>
+          </div>
+          <div class="py-2.5 flex items-center justify-between gap-4">
+            <dt class="text-slate-600">Switch history view (All, Success, Failed, Pending)</dt>
+            <dd class="font-mono text-slate-900">1 &ndash; 4</dd>
+          </div>
+          <div class="py-2.5 flex items-center justify-between gap-4">
+            <dt class="text-slate-600">Focus battle search input</dt>
+            <dd class="font-mono text-slate-900">/</dd>
+          </div>
+          <div class="py-2.5 flex items-center justify-between gap-4">
+            <dt class="text-slate-600">Close dialogs / toggle this guide</dt>
+            <dd class="font-mono text-slate-900">Esc / ?</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
+
+    <!-- Integration Contract Modal -->
+    <div
+      id="schema-modal"
+      class="fixed inset-0 z-50 hidden bg-slate-950/60 backdrop-blur-xs p-4 sm:p-8 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="schema-modal-title"
+    >
+      <div class="bg-white border border-slate-200 rounded-lg max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-xl">
+        <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
+          <h3 id="schema-modal-title" class="font-display text-base font-semibold text-slate-900">
+            Flask + SQLite + Jinja Integration Contract
+          </h3>
+          <button
+            id="schema-modal-close"
+            type="button"
+            class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"
+          >
+            Close
+          </button>
+        </div>
+        <div class="p-6 overflow-y-auto space-y-4 text-sm text-slate-700 leading-relaxed">
+          <p>
+            Presentation is isolated from data. To connect this read-only console to your Flask + SQLite backend, serialize your battle rows in Python and embed them into the Jinja template or pass a JSON endpoint URL.
+          </p>
+          <pre class="font-mono text-xs bg-slate-900 text-slate-100 p-4 rounded-md overflow-x-auto leading-relaxed"><code>&lt;!-- In templates/dashboard.html --&gt;
+&lt;script id="arena-payload" type="application/json"&gt;
+  {{ arena_payload | tojson }}
+&lt;/script&gt;</code></pre>
+          <p class="text-xs text-slate-500">
+            Expected top-level keys: <code class="font-mono text-slate-700">mode</code> (<code class="font-mono">"historical_demo" | "live_archive"</code>), <code class="font-mono text-slate-700">status</code> (<code class="font-mono">"ready" | "empty" | "loading" | "error"</code>), <code class="font-mono text-slate-700">activeBattleId</code>, <code class="font-mono text-slate-700">battles[]</code>, and <code class="font-mono text-slate-700">error</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>
+{% endraw %}
+<noscript>{% include "arena_fallback.html" %}</noscript>
