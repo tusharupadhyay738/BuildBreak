@@ -103,6 +103,21 @@ Git history. Generated repairs undergo syntax, route and sensitive-operation
 checks before execution. Validated Gemini/cache repairs must also restore their
 selected independent invariant. These guards are not an OS sandbox.
 
+## Watch Kane live inside Arena
+
+The optional local Kane panel now displays the actual viewport of the isolated
+Chrome browser that Kane controls, alongside live numbered test steps. It uses a
+fresh browser profile and a local image feed; it does not capture your desktop or
+normal Chrome profile. The panel is read-only and runs the existing checkout test,
+not a full Gemini/Codex battle.
+
+The feed refreshes roughly up to twice per second. It is labeled **LIVE** during
+the run and switches to **RECORDED - verified evidence** after the final pack
+checks. Live images are observation, not proof of a passing test. No sample frame
+or simulated pass is substituted when capture or verification fails.
+
+See [setup, limits and implementation](docs/guides/live-kane-monitor.md).
+
 ## See the evidence
 
 ![Genuine Kane failure and repair images in Arena, with recorded amounts and execution references](docs/images/arena-evidence.png)

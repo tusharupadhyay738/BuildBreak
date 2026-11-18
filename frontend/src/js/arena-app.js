@@ -669,15 +669,29 @@ export function initArenaDashboard() {
     }
   }
 
-  function showLiveScreenshot(url) {
-    // The server supplies an opaque reference, never an arbitrary file/URL.
-    if (typeof url !== 'string' || !/^\/api\/kane\/screenshot\?session=\d{8}T\d{6}-[a-f0-9]{8}$/.test(url)) return;
+  function showLiveScreenshot(url, live = false) {
+    // Only opaque local image routes; never a browser-control endpoint.
+    const pattern = live
+      ? /^\/api\/kane\/live-view\?session=\d{8}T\d{6}-[a-f0-9]{8}$/
+      : /^\/api\/kane\/screenshot\?session=\d{8}T\d{6}-[a-f0-9]{8}$/;
+    if (typeof url !== 'string' || !pattern.test(url)) return;
     const img = document.getElementById('live-stream-img');
     if (img) {
       img.src = url;
+      img.alt = live ? 'Live viewport of the isolated Chrome controlled by Kane' : 'Verified recorded Kane evidence screenshot';
       img.classList.remove('hidden');
       document.getElementById('live-stream-placeholder')?.classList.add('hidden');
+      const label = document.getElementById('live-view-label');
+      if (label) label.textContent = live ? 'LIVE - observer view, not a verdict' : 'RECORDED - verified evidence';
     }
+  }
+
+  function clearLiveView(message = 'Waiting for the isolated Kane browser...') {
+    const img = document.getElementById('live-stream-img');
+    if (img) { img.removeAttribute('src'); img.classList.add('hidden'); }
+    document.getElementById('live-stream-placeholder')?.classList.remove('hidden');
+    const label = document.getElementById('live-view-label');
+    if (label) label.textContent = message;
   }
 
   function handleLiveKaneEvent(event) {
@@ -685,7 +699,8 @@ export function initArenaDashboard() {
       if (event.started_at) liveStartTime = event.started_at * 1000;
       handleLiveKaneEvent({type: 'status', status: event.status, message: event.message});
       if (event.current_step) handleLiveKaneEvent({type: 'step_start', step_index: event.current_step});
-      if (event.latest_screenshot) showLiveScreenshot(event.latest_screenshot);
+      if (event.live_view_url && event.status === 'running') showLiveScreenshot(event.live_view_url, true);
+      else if (event.latest_screenshot) showLiveScreenshot(event.latest_screenshot);
       for (const step of event.steps || []) appendLiveLog(`Step ${step.index}: ${step.status}`);
     } else if (event.type === 'status') {
       const running = event.status === 'running';
@@ -723,6 +738,9 @@ export function initArenaDashboard() {
       appendLiveLog(`Step ${event.step_index}: running`, 'text-emerald-400');
     } else if (event.type === 'step_end') {
       appendLiveLog(`Step ${event.step_index}: ${event.status}`, event.status === 'passed' ? 'text-emerald-400' : 'text-amber-300');
+    } else if (event.type === 'live_view') {
+      if (event.state === 'ready' && event.url) showLiveScreenshot(event.url, true);
+      else clearLiveView(event.state === 'ended' ? 'Live view ended - verifying evidence...' : 'Waiting for the local demo viewport...');
     } else if (event.type === 'screenshot') {
       showLiveScreenshot(event.url);
     }
@@ -761,9 +779,7 @@ export function initArenaDashboard() {
       if (!response.ok) throw new Error(data.error || `Launch refused (${response.status}).`);
       const feed = document.getElementById('live-console-feed');
       if (feed) feed.replaceChildren();
-      const img = document.getElementById('live-stream-img');
-      if (img) { img.removeAttribute('src'); img.classList.add('hidden'); }
-      document.getElementById('live-stream-placeholder')?.classList.remove('hidden');
+      clearLiveView();
       liveStartTime = Date.now();
       connectKaneStream();
     } catch (error) {
@@ -779,6 +795,7 @@ export function initArenaDashboard() {
   window.addEventListener('pagehide', () => {
     liveEventSource?.close();
     clearInterval(liveTimerInterval);
+    document.getElementById('live-stream-img')?.removeAttribute('src');
   });
 
   document.addEventListener('arena:archive-update', (event) => {

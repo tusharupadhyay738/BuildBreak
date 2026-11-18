@@ -48,6 +48,8 @@ class LiveKaneSession:
         self.lock = threading.RLock()
         self.latest_screenshot = None
         self.screenshot = None
+        self.browser = None
+        self.live_view_url = None
         self.result = None
         self.error_message = None
         self.started_at, self.finished_at = None, None
@@ -64,7 +66,7 @@ class LiveKaneSession:
                 target_url=self.target_url, current_step=self.current_step,
                 total_steps=self.total_steps, steps=self.steps,
                 latest_screenshot=self.latest_screenshot, message=self.error_message,
-                started_at=self.started_at)))
+                started_at=self.started_at, live_view_url=self.live_view_url)))
         return listener
 
     def remove_listener(self, listener):
@@ -83,6 +85,7 @@ class LiveKaneSession:
         # Lazy imports keep isolated BreakShop snapshots independent of agent modules.
         from .battle_runner import run_kane
         from .evidence_images import screenshot_for
+        from .live_browser import LiveBrowser
         self.started_at = time.time()
         self.broadcast(dict(type='status', status='running', message='Starting genuine Kane verification. Watch Chrome without interacting.'))
         try:
@@ -94,9 +97,12 @@ class LiveKaneSession:
             test_file = workspace / TEST_PATH
             test_file.parent.mkdir(parents=True)
             test_file.write_bytes((ROOT / TEST_PATH).read_bytes())
+            self.browser = LiveBrowser(workspace, self.target_url, self.show_browser, self.browser_state)
+            self.browser.start()
             result = run_kane(workspace, root / self.id / 'baseline-0', self.target_url,
                               'ArenaLive-' + self.id, kane, show_browser=self.show_browser,
-                              on_line=self.handle_line)
+                              on_line=self.handle_line, cdp_endpoint=self.browser.endpoint)
+            self.browser.close()
             self.result = result['result']
             self.status = {'passed': 'passed', 'verification_failed': 'failed'}.get(self.result, 'error')
             self.error_message = ('Kane could not confirm an application verdict. Check the private run logs; no pass was recorded.'
@@ -109,12 +115,20 @@ class LiveKaneSession:
         except Exception:
             # Never expose exception text, command lines, paths, credentials or raw logs.
             self.status, self.result = 'error', 'infrastructure_error'
-            self.error_message = 'Kane could not start or verify this run. Check CLI installation/login and private logs. No simulation was run.'
+            self.error_message = 'Chrome or Kane could not start or verify this run. Check Chrome, CLI installation/login and private logs. No simulation was run.'
         finally:
+            if self.browser:
+                self.browser.close()
             self.finished_at = time.time()
             self.broadcast(dict(type='status', status=self.status, result=self.result,
                                 message=self.error_message,
                                 duration=round(self.finished_at - self.started_at, 2)))
+
+    def browser_state(self, state):
+        with self.lock:
+            self.live_view_url = ('/api/kane/live-view?session=' + self.id
+                                  if state == 'ready' and self.status == 'running' else None)
+            self.broadcast(dict(type='live_view', state=state, url=self.live_view_url))
 
     def handle_line(self, line):
         try:

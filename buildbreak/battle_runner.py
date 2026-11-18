@@ -100,6 +100,7 @@ def snapshot(source, destination):
              'buildbreak/__init__.py', 'buildbreak/arena.py', 'buildbreak/import_battle.py',
              'buildbreak/battle_history.py', 'buildbreak/evidence_images.py', 'buildbreak/console_payload.py',
              'buildbreak/kane_live.py',
+             'buildbreak/live_browser.py',
              'requirements.txt', TEST.as_posix()]
     for folder in ('templates', 'static'):
         files += [p.relative_to(source).as_posix() for p in (source / folder).rglob('*') if p.is_file()]
@@ -289,7 +290,7 @@ def find_evidence_pack(events, workspace):
     return None, None, None
 
 
-def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=False, on_line=None):
+def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=False, on_line=None, cdp_endpoint=None):
     artifacts.mkdir(parents=True, exist_ok=False)
     test_hash = digest(workspace / TEST)
     args = [kane, 'testmd', 'run', str(TEST), '--override-start-url', url,
@@ -297,6 +298,12 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=F
             '--timeout', '300', '--name', name, '--agent']
     if not show_browser:
         args.append('--headless')
+    if cdp_endpoint is not None:
+        parsed = urllib.parse.urlsplit(cdp_endpoint)
+        if (parsed.scheme != 'http' or parsed.hostname != '127.0.0.1' or not parsed.port
+                or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment):
+            raise ValueError('Expected an owned loopback Chrome endpoint')
+        args += ['--cdp-endpoint', cdp_endpoint]
     events = []
     started = time.monotonic()
     timed_out = False

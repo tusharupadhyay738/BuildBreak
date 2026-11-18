@@ -188,6 +188,21 @@ def register_arena(app):
         response.call_on_close(lambda: session.remove_listener(listener))
         return response
 
+    @app.get('/api/kane/live-view')
+    def api_kane_live_view():
+        require_local_viewer()
+        session = get_active_session()
+        if (not session or session.status != 'running' or not session.browser
+                or request.args.get('session') != session.id):
+            abort(404)
+        # Frames come from this session's owned Chrome, never a client URL/file.
+        def active():
+            return session is get_active_session() and session.status == 'running'
+        return app.response_class(session.browser.frames(active),
+            mimetype='multipart/x-mixed-replace; boundary=arena-frame',
+            headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+                     'Referrer-Policy': 'no-referrer', 'X-Accel-Buffering': 'no'})
+
     @app.get('/api/kane/screenshot')
     def api_kane_screenshot():
         require_local_viewer()

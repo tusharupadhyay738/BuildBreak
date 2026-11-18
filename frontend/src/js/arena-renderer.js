@@ -345,11 +345,12 @@ function renderOverviewSection(
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
             <!-- Left: Browser Viewport Stream -->
             <div class="lg:col-span-7 bg-slate-950 rounded border border-slate-800 flex flex-col items-center justify-center min-h-[220px] relative overflow-hidden group">
+              <span id="live-view-label" class="absolute top-2 left-2 z-10 rounded bg-slate-900/80 px-2 py-0.5 text-[10px] font-mono text-slate-300">Waiting for a live run</span>
               <img id="live-stream-img" src="" alt="Verified Kane evidence screenshot" class="w-full h-auto max-h-[260px] object-contain hidden">
               <div id="live-stream-placeholder" class="flex flex-col items-center text-center p-6 space-y-2 text-slate-500">
                 <svg class="w-8 h-8 opacity-40 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                <p class="text-xs">Genuine recorded screenshot appears after evidence verification</p>
-                <span class="text-[11px] text-slate-600">Watch Chrome while Kane runs; do not click inside it</span>
+                <p class="text-xs">The same isolated Chrome that Kane controls appears here live</p>
+                <span class="text-[11px] text-slate-600">Read-only viewport feed. Do not interact with the pop-up Chrome.</span>
               </div>
               <div id="live-step-pill" class="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur-xs text-[10px] font-mono text-slate-300 border border-slate-700 hidden">
                 Waiting for Kane steps

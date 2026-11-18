@@ -102,13 +102,17 @@ class LiveKaneEndpointTests(unittest.TestCase):
                 with patch.object(kane_live, 'ROOT', self.root), \
                      patch.object(kane_live, 'resolve_kane_executable', return_value='fixture-cli'), \
                      patch('buildbreak.battle_runner.run_kane', return_value=run) as runner, \
+                     patch('buildbreak.live_browser.LiveBrowser') as browser_type, \
                      patch('buildbreak.evidence_images.screenshot_for', return_value=None):
+                    browser_type.return_value.endpoint = 'http://127.0.0.1:9222'
                     source = self.root / TEST_PATH
                     source.parent.mkdir(parents=True, exist_ok=True)
                     source.write_text('offline fixture')
                     session.run()
                 self.assertEqual(session.status, status)
                 self.assertTrue(callable(runner.call_args.kwargs['on_line']))
+                self.assertEqual(runner.call_args.kwargs['cdp_endpoint'], 'http://127.0.0.1:9222')
+                browser_type.return_value.close.assert_called()
                 self.assertNotEqual(runner.call_args.args[0], self.root)
                 self.assertIsNone(session.latest_screenshot)
 
