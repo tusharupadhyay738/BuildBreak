@@ -54,7 +54,7 @@ function renderWorkspaceBanner(payload, activePreviewKey) {
         <div class="flex flex-wrap items-center gap-2 text-xs text-slate-600">
           <span class="font-semibold text-slate-900">${escapeHtml(modeLabel)}</span>
           <span aria-hidden="true">&middot;</span>
-          <span>No live execution or launch controls</span>
+          <span>History is read-only; local Kane monitor requires opt-in</span>
           <span aria-hidden="true">&middot;</span>
           <span>${escapeHtml(payload.dataSourceLabel || 'Flask + SQLite dataset')}</span>
         </div>
@@ -300,6 +300,75 @@ function renderOverviewSection(
       </div>
 
       <div class="px-6 py-5 space-y-4">
+        <!-- Live Kane Execution & Chrome Demo Window Panel -->
+        <div id="live-kane-panel" class="border border-slate-300 bg-slate-900 text-slate-100 rounded-lg p-5 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2.5">
+              <span class="relative flex h-2.5 w-2.5">
+                <span id="live-status-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 hidden"></span>
+                <span id="live-status-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-400"></span>
+              </span>
+              <h2 class="font-display text-sm font-semibold text-white tracking-wide flex items-center gap-2">
+                Live Kane CLI & Chrome Runner
+                <span id="live-status-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">Ready</span>
+              </h2>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <label class="inline-flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+                <input id="live-show-browser" type="checkbox" checked class="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-400">
+                <span>Pop-up Chrome Window</span>
+              </label>
+              <button
+                id="btn-run-kane-live"
+                type="button"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white transition-colors shadow-xs"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                <span>Run Kane Live Test</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Configuration Inputs for Judges / Alternative Demos -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1 font-medium">Target App URL (Judge Demo / Custom Port)</label>
+              <input id="live-target-url" type="text" value="http://127.0.0.1:5000" class="w-full font-mono text-xs bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1 font-medium">Test Markdown File</label>
+              <input id="live-test-path" type="text" readonly value=".testmuai/tests/CheckoutConsistency_test.md" class="w-full font-mono text-xs bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500">
+            </div>
+          </div>
+
+          <!-- Live Visual Stream & Step Terminal -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+            <!-- Left: Browser Viewport Stream -->
+            <div class="lg:col-span-7 bg-slate-950 rounded border border-slate-800 flex flex-col items-center justify-center min-h-[220px] relative overflow-hidden group">
+              <img id="live-stream-img" src="" alt="Verified Kane evidence screenshot" class="w-full h-auto max-h-[260px] object-contain hidden">
+              <div id="live-stream-placeholder" class="flex flex-col items-center text-center p-6 space-y-2 text-slate-500">
+                <svg class="w-8 h-8 opacity-40 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <p class="text-xs">Genuine recorded screenshot appears after evidence verification</p>
+                <span class="text-[11px] text-slate-600">Watch Chrome while Kane runs; do not click inside it</span>
+              </div>
+              <div id="live-step-pill" class="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur-xs text-[10px] font-mono text-slate-300 border border-slate-700 hidden">
+                Waiting for Kane steps
+              </div>
+            </div>
+
+            <!-- Right: Real-time Step Log Terminal -->
+            <div class="lg:col-span-5 bg-slate-950 rounded border border-slate-800 flex flex-col p-3 text-xs min-h-[220px] max-h-[260px]">
+              <div class="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-800/80 text-[11px] text-slate-400 font-mono">
+                <span>EXECUTION LOG</span>
+                <span id="live-timer" class="text-slate-500 tabular-nums">00:00</span>
+              </div>
+              <div id="live-console-feed" class="flex-1 overflow-y-auto space-y-1 font-mono text-[11px] text-slate-300 leading-snug pr-1">
+                <div class="text-slate-500 italic">Ready. Local opt-in required to launch. This runs the checkout test, not a complete battle.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div class="space-y-0.5">
             <div class="flex items-center gap-2.5">

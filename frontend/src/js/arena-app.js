@@ -229,6 +229,7 @@ export function initArenaDashboard() {
     const sameBattle = activeBattleId !== null && activeBattleId === lastRenderedBattleId;
     const prevStageIndex = sameBattle ? lastRenderedStageIndex : 0;
 
+    const livePanel = document.getElementById('live-kane-panel');
     mainEl.innerHTML = renderArenaDashboard({
       payload: state.payload,
       activePreviewKey: state.activePreviewKey,
@@ -243,6 +244,9 @@ export function initArenaDashboard() {
       screenshotCompareMode: state.screenshotCompareMode,
       wipePercent: state.wipePercent,
     });
+
+    const newLivePanel = document.getElementById('live-kane-panel');
+    if (livePanel && newLivePanel) newLivePanel.replaceWith(livePanel);
 
     lastRenderedBattleId = activeBattleId;
     lastRenderedStageIndex = state.selectedStageIndex;
@@ -638,6 +642,143 @@ export function initArenaDashboard() {
           : (currentIdx - 1 + filteredBattles.length) % filteredBattles.length;
       selectBattle(filteredBattles[nextIdx].id);
     }
+  });
+
+  // Genuine local Kane monitor. Reading this stream never starts a test.
+  let liveEventSource = null;
+  let liveTimerInterval = null;
+  let liveStartTime = null;
+
+  function appendLiveLog(text, colorClass = 'text-slate-300') {
+    const feed = document.getElementById('live-console-feed');
+    if (!feed) return;
+    const row = document.createElement('div');
+    row.className = `${colorClass} truncate`;
+    row.textContent = text;
+    feed.appendChild(row);
+    while (feed.children.length > 150) feed.firstElementChild.remove();
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  function setRunButton(running) {
+    const btn = document.getElementById('btn-run-kane-live');
+    if (btn) {
+      btn.disabled = running;
+      btn.classList.toggle('opacity-50', running);
+      btn.classList.toggle('cursor-not-allowed', running);
+    }
+  }
+
+  function showLiveScreenshot(url) {
+    // The server supplies an opaque reference, never an arbitrary file/URL.
+    if (typeof url !== 'string' || !/^\/api\/kane\/screenshot\?session=\d{8}T\d{6}-[a-f0-9]{8}$/.test(url)) return;
+    const img = document.getElementById('live-stream-img');
+    if (img) {
+      img.src = url;
+      img.classList.remove('hidden');
+      document.getElementById('live-stream-placeholder')?.classList.add('hidden');
+    }
+  }
+
+  function handleLiveKaneEvent(event) {
+    if (event.type === 'snapshot') {
+      if (event.started_at) liveStartTime = event.started_at * 1000;
+      handleLiveKaneEvent({type: 'status', status: event.status, message: event.message});
+      if (event.current_step) handleLiveKaneEvent({type: 'step_start', step_index: event.current_step});
+      if (event.latest_screenshot) showLiveScreenshot(event.latest_screenshot);
+      for (const step of event.steps || []) appendLiveLog(`Step ${step.index}: ${step.status}`);
+    } else if (event.type === 'status') {
+      const running = event.status === 'running';
+      const passed = event.status === 'passed';
+      const idle = event.status === 'idle';
+      const badge = document.getElementById('live-status-badge');
+      const dot = document.getElementById('live-status-dot');
+      if (badge) {
+        badge.textContent = idle ? 'Ready' : String(event.status).toUpperCase();
+        badge.className = 'text-[10px] font-mono px-2 py-0.5 rounded font-medium ' +
+          (running || passed ? 'bg-emerald-900/60 text-emerald-300' : idle ? 'bg-slate-800 text-slate-300' : 'bg-rose-700 text-white');
+      }
+      if (dot) dot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 ' +
+        (running || passed ? 'bg-emerald-400' : idle ? 'bg-slate-400' : 'bg-rose-500');
+      document.getElementById('live-status-pulse')?.classList.toggle('hidden', !running);
+      setRunButton(running);
+      clearInterval(liveTimerInterval);
+      if (running) {
+        liveStartTime ||= Date.now();
+        liveTimerInterval = setInterval(() => {
+          const timer = document.getElementById('live-timer');
+          const secs = Math.floor((Date.now() - liveStartTime) / 1000);
+          if (timer) timer.textContent = `${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`;
+        }, 1000);
+      } else {
+        liveEventSource?.close();
+      }
+      if (event.message) appendLiveLog(event.message, 'text-amber-300');
+    } else if (event.type === 'step_start') {
+      const pill = document.getElementById('live-step-pill');
+      if (pill) {
+        pill.classList.remove('hidden');
+        pill.textContent = `Kane step ${event.step_index}`;
+      }
+      appendLiveLog(`Step ${event.step_index}: running`, 'text-emerald-400');
+    } else if (event.type === 'step_end') {
+      appendLiveLog(`Step ${event.step_index}: ${event.status}`, event.status === 'passed' ? 'text-emerald-400' : 'text-amber-300');
+    } else if (event.type === 'screenshot') {
+      showLiveScreenshot(event.url);
+    }
+  }
+
+  function connectKaneStream() {
+    liveEventSource?.close();
+    liveEventSource = new EventSource('/api/kane/stream');
+    liveEventSource.onmessage = (event) => {
+      try { handleLiveKaneEvent(JSON.parse(event.data)); } catch (_) { /* Ignore invalid transport data. */ }
+    };
+    liveEventSource.onerror = () => {
+      liveEventSource?.close();
+      clearInterval(liveTimerInterval);
+      setRunButton(false);
+      const badge = document.getElementById('live-status-badge');
+      if (badge) badge.textContent = 'Disconnected';
+      appendLiveLog('Monitor disconnected. Reload to reconnect; no result is inferred.', 'text-amber-300');
+    };
+  }
+
+  async function triggerKaneLiveRun() {
+    const target = document.getElementById('live-target-url');
+    const test = document.getElementById('live-test-path');
+    const browser = document.getElementById('live-show-browser');
+    setRunButton(true);
+    try {
+      const response = await fetch('/api/kane/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Arena-Request': '1' },
+        body: JSON.stringify({target_url: target?.value.trim() || 'http://127.0.0.1:5000',
+          test_path: test?.value.trim() || '.testmuai/tests/CheckoutConsistency_test.md',
+          show_browser: browser?.checked ?? true})
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `Launch refused (${response.status}).`);
+      const feed = document.getElementById('live-console-feed');
+      if (feed) feed.replaceChildren();
+      const img = document.getElementById('live-stream-img');
+      if (img) { img.removeAttribute('src'); img.classList.add('hidden'); }
+      document.getElementById('live-stream-placeholder')?.classList.remove('hidden');
+      liveStartTime = Date.now();
+      connectKaneStream();
+    } catch (error) {
+      appendLiveLog(error.message, 'text-rose-400');
+      setRunButton(false);
+    }
+  }
+
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('#btn-run-kane-live')) triggerKaneLiveRun();
+  });
+  connectKaneStream();
+  window.addEventListener('pagehide', () => {
+    liveEventSource?.close();
+    clearInterval(liveTimerInterval);
   });
 
   document.addEventListener('arena:archive-update', (event) => {

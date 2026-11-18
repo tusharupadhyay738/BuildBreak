@@ -1,5 +1,7 @@
 """Read-only views and private local evidence configuration."""
 import json
+import os
+import queue
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -8,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from .battle_history import decorate, summarize
 from .evidence_images import screenshot_for
 from .console_payload import console_payload
+from .kane_live import start_live_session, get_active_session
 
 STATE_LABELS = {
     'prepared': 'Battle prepared', 'verifying': 'Kane is checking',
@@ -124,6 +127,78 @@ def register_arena(app):
         response = app.json.response(console_payload(sessions, app.config['ARENA_ARTIFACTS'], selected, display_time))
         response.headers.update({'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
         return response
+
+    # Remote/public instances remain read-only unless a local operator opts in.
+    app.config.setdefault('ARENA_ENABLE_LIVE_KANE', os.environ.get('ARENA_ENABLE_LIVE_KANE') == '1')
+
+    def require_local_viewer():
+        if request.remote_addr not in {'127.0.0.1', '::1'} or request.host.split(':')[0] not in {'localhost', '127.0.0.1'}:
+            abort(403)
+        origin = request.headers.get('Origin')
+        if origin and origin != request.host_url.rstrip('/'):
+            abort(403)
+
+    @app.post('/api/kane/run')
+    def api_kane_run():
+        require_local_viewer()
+        if request.headers.get('X-Arena-Request') != '1':
+            abort(403)
+        if not app.config['ARENA_ENABLE_LIVE_KANE']:
+            return app.json.response(error='Live launch is disabled. Set ARENA_ENABLE_LIVE_KANE=1 locally and restart the app to enable it.'), 403
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return app.json.response(error='Expected a JSON object.'), 400
+        try:
+            session = start_live_session(
+                data.get('target_url', 'http://127.0.0.1:5000'),
+                data.get('test_path', '.testmuai/tests/CheckoutConsistency_test.md'),
+                data.get('show_browser', True))
+        except ValueError as error:
+            return app.json.response(error=str(error)), 400
+        return app.json.response(status=session.status, session_id=session.id)
+
+    @app.get('/api/kane/stream')
+    def api_kane_stream():
+        require_local_viewer()
+        session = get_active_session()
+        if not session:
+            return app.response_class('data: {"type":"snapshot","status":"idle"}\n\n',
+                mimetype='text/event-stream', headers={'Cache-Control': 'no-store'})
+        try:
+            listener = session.add_listener()
+        except ValueError:
+            abort(429)
+
+        def event_stream():
+            try:
+                while True:
+                    try:
+                        event = listener.get(timeout=15)
+                        yield f'data: {json.dumps(event)}\n\n'
+                        if event.get('type') in {'status', 'snapshot'} and event.get('status') != 'running':
+                            return
+                    except queue.Empty:
+                        yield ': ping\n\n'
+            finally:
+                session.remove_listener(listener)
+
+        response = app.response_class(event_stream(), mimetype='text/event-stream',
+            headers={'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no',
+                     'X-Content-Type-Options': 'nosniff'})
+        response.call_on_close(lambda: session.remove_listener(listener))
+        return response
+
+    @app.get('/api/kane/screenshot')
+    def api_kane_screenshot():
+        require_local_viewer()
+        session = get_active_session()
+        if (request.args.get('file') is not None or not session or not session.screenshot
+                or request.args.get('session') != session.id):
+            abort(404)
+        # Only bytes from the hash-checked sealed pack; no client-supplied paths.
+        return app.response_class(session.screenshot.content, mimetype=session.screenshot.mimetype,
+            headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+                     'Referrer-Policy': 'no-referrer'})
 
     @app.get("/arena")
     def arena():

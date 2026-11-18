@@ -1,4 +1,4 @@
-"""Local battle orchestration. No commands are exposed through the web app."""
+"""Local battle orchestration; the opt-in local monitor reuses Kane verification only."""
 import argparse
 import ast
 from collections import Counter
@@ -18,7 +18,7 @@ import urllib.request
 import uuid
 import zipfile
 from contextlib import contextmanager
-from .process_control import run as owned_run, spawn as owned_spawn, stop_tree, child_environment
+from .process_control import run as owned_run, spawn as owned_spawn, stop_tree, child_environment, stream_run
 from .gemini_breaker import configuration as gemini_configuration, propose_fault, GeminiError
 from .fault_validator import (InvalidFault, validate_fault, direct_check, json_command,
                              TEST_SCRIPT, protected as validate_protected, fault_family, INVARIANTS)
@@ -99,6 +99,7 @@ def snapshot(source, destination):
     files = ['app.py', 'arena.py', 'test_app.py', 'test_arena.py',
              'buildbreak/__init__.py', 'buildbreak/arena.py', 'buildbreak/import_battle.py',
              'buildbreak/battle_history.py', 'buildbreak/evidence_images.py', 'buildbreak/console_payload.py',
+             'buildbreak/kane_live.py',
              'requirements.txt', TEST.as_posix()]
     for folder in ('templates', 'static'):
         files += [p.relative_to(source).as_posix() for p in (source / folder).rglob('*') if p.is_file()]
@@ -288,7 +289,7 @@ def find_evidence_pack(events, workspace):
     return None, None, None
 
 
-def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=False):
+def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=False, on_line=None):
     artifacts.mkdir(parents=True, exist_ok=False)
     test_hash = digest(workspace / TEST)
     args = [kane, 'testmd', 'run', str(TEST), '--override-start-url', url,
@@ -301,7 +302,9 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=F
     timed_out = False
     with open(artifacts / 'stderr.log', 'w', encoding='utf-8') as err:
         try:
-            completed = owned_run(args, cwd=workspace, stderr=err, timeout=timeout)
+            completed = (stream_run(args, cwd=workspace, stderr=err, timeout=timeout, on_line=on_line)
+                         if on_line is not None else
+                         owned_run(args, cwd=workspace, stderr=err, timeout=timeout))
             output, exit_code = completed.stdout, completed.returncode
         except subprocess.TimeoutExpired as error:
             output = error.output or ''

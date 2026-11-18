@@ -217,7 +217,10 @@ own isolated app; your main shop is preserved.
 ```
 
 Keep the main app running in a separate terminal and open `/arena` to follow
-recorded progress. The dashboard cannot launch agents or execute shell commands.
+recorded progress. By default the dashboard is read-only. An optional local-only
+Kane monitor can run the existing protected checkout test after an explicit click;
+it cannot launch a Breaker or Builder or start a complete battle. See
+[local Kane monitor](docs/guides/live-kane-monitor.md).
 
 | Mode | When to use it |
 | --- | --- |

@@ -2,6 +2,7 @@
 import os
 import signal
 import subprocess
+import threading
 from pathlib import Path
 
 
@@ -137,3 +138,44 @@ def run(args, cwd, timeout=60, input_text=None, stderr=None, environment='cli'):
         return subprocess.CompletedProcess(args, process.returncode, output, errors)
     finally:
         stop_tree(process)
+
+
+def stream_run(args, cwd, timeout, stderr, on_line):
+    """Stream stdout without sacrificing the owned tree or wall-clock deadline.
+
+    stderr and complete stdout stay private. The caller must allowlist any
+    fields it publishes; a callback exception fails the invocation closed.
+    """
+    process = spawn(args, cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                    stderr=stderr, text=True, encoding='utf-8', errors='replace',
+                    env=child_environment('cli', cwd))
+    output, errors = [], []
+
+    def read_output():
+        try:
+            for line in process.stdout:
+                output.append(line)
+                on_line(line)
+        except Exception as error:
+            errors.append(error)
+
+    reader = threading.Thread(target=read_output, daemon=True)
+    reader.start()
+    try:
+        try:
+            process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            stop_tree(process)
+            reader.join(timeout=2)
+            raise subprocess.TimeoutExpired(args, timeout, output=''.join(output)) from None
+        stop_tree(process)
+        reader.join(timeout=2)
+        if reader.is_alive():
+            raise RuntimeError('Owned process output did not close within the cleanup deadline')
+        if errors:
+            raise RuntimeError('Live output processing failed') from errors[0]
+        return subprocess.CompletedProcess(args, process.returncode, ''.join(output), None)
+    finally:
+        stop_tree(process)
+        if not reader.is_alive():
+            process.stdout.close()
