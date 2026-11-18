@@ -138,6 +138,9 @@ def register_arena(app):
         if origin and origin != request.host_url.rstrip('/'):
             abort(403)
 
+    from .project_setup import register_project_routes
+    register_project_routes(app, require_local_viewer)
+
     @app.post('/api/kane/run')
     def api_kane_run():
         require_local_viewer()

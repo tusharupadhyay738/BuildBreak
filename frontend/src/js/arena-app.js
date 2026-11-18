@@ -230,6 +230,7 @@ export function initArenaDashboard() {
     const prevStageIndex = sameBattle ? lastRenderedStageIndex : 0;
 
     const livePanel = document.getElementById('live-kane-panel');
+    const projectPanel = document.getElementById('project-setup-panel');
     mainEl.innerHTML = renderArenaDashboard({
       payload: state.payload,
       activePreviewKey: state.activePreviewKey,
@@ -247,6 +248,8 @@ export function initArenaDashboard() {
 
     const newLivePanel = document.getElementById('live-kane-panel');
     if (livePanel && newLivePanel) newLivePanel.replaceWith(livePanel);
+    const newProjectPanel = document.getElementById('project-setup-panel');
+    if (projectPanel && newProjectPanel) newProjectPanel.replaceWith(projectPanel);
 
     lastRenderedBattleId = activeBattleId;
     lastRenderedStageIndex = state.selectedStageIndex;
@@ -648,6 +651,8 @@ export function initArenaDashboard() {
   let liveEventSource = null;
   let liveTimerInterval = null;
   let liveStartTime = null;
+  let projectRunActive = false;
+  let followedBattle = null;
 
   function appendLiveLog(text, colorClass = 'text-slate-300') {
     const feed = document.getElementById('live-console-feed');
@@ -694,10 +699,30 @@ export function initArenaDashboard() {
     if (label) label.textContent = message;
   }
 
+  async function followFullBattle(id) {
+    if (typeof id !== 'string' || !/^\d{8}T\d{6}-[a-f0-9]{8}$/.test(id) || followedBattle === id) return;
+    followedBattle = id;
+    projectText('project-status',`Full battle ${id} is running. Live view and history refer to this run.`);
+    try {
+      const response = await fetch(`/arena/data?battle=${id}`,{cache:'no-store'});
+      if (!response.ok) return;
+      const payload = await response.json();
+      state.payload = payload;
+      state.activePreviewKey = 'archive';
+      state.selectedBattleId = id;
+      state.selectedStageIndex = 0;
+      render();
+    } catch (_) { appendLiveLog('History refresh unavailable. The run continues; reload to reconnect.'); }
+  }
+
   function handleLiveKaneEvent(event) {
-    if (event.type === 'snapshot') {
+    if (event.type === 'battle') {
+      followFullBattle(event.battle_id);
+    } else if (event.type === 'snapshot') {
+      if (event.battle_id) followFullBattle(event.battle_id);
       if (event.started_at) liveStartTime = event.started_at * 1000;
       handleLiveKaneEvent({type: 'status', status: event.status, message: event.message});
+      if (event.phase) appendLiveLog(`Kane phase: ${event.phase}`, 'text-cyan-300');
       if (event.current_step) handleLiveKaneEvent({type: 'step_start', step_index: event.current_step});
       if (event.live_view_url && event.status === 'running') showLiveScreenshot(event.live_view_url, true);
       else if (event.latest_screenshot) showLiveScreenshot(event.latest_screenshot);
@@ -717,6 +742,9 @@ export function initArenaDashboard() {
         (running || passed ? 'bg-emerald-400' : idle ? 'bg-slate-400' : 'bg-rose-500');
       document.getElementById('live-status-pulse')?.classList.toggle('hidden', !running);
       setRunButton(running);
+      projectRunActive = running;
+      updateProjectStart();
+      if (!running && followedBattle) projectText('project-status', `Battle ${followedBattle}: ${event.message || event.status}`);
       clearInterval(liveTimerInterval);
       if (running) {
         liveStartTime ||= Date.now();
@@ -738,6 +766,10 @@ export function initArenaDashboard() {
       appendLiveLog(`Step ${event.step_index}: running`, 'text-emerald-400');
     } else if (event.type === 'step_end') {
       appendLiveLog(`Step ${event.step_index}: ${event.status}`, event.status === 'passed' ? 'text-emerald-400' : 'text-amber-300');
+    } else if (event.type === 'phase') {
+      appendLiveLog(`Kane phase: ${event.phase} (attempt ${event.attempt})`, 'text-cyan-300');
+    } else if (event.type === 'progress') {
+      appendLiveLog(event.message, 'text-cyan-300');
     } else if (event.type === 'live_view') {
       if (event.state === 'ready' && event.url) showLiveScreenshot(event.url, true);
       else clearLiveView(event.state === 'ended' ? 'Live view ended - verifying evidence...' : 'Waiting for the local demo viewport...');
@@ -798,12 +830,97 @@ export function initArenaDashboard() {
     document.getElementById('live-stream-img')?.removeAttribute('src');
   });
 
+  let projectInfo = null;
+  let selectedProject = 'builtin';
+  let projectLaunching = false;
+  function projectText(id, text) {
+    const node = document.getElementById(id);
+    if (node) node.textContent = text;
+  }
+  function updateProjectStart() {
+    const button = document.getElementById('project-start');
+    if (!button) return;
+    const mode = document.getElementById('project-breaker')?.value || 'gemini';
+    const requirements = projectInfo?.prerequisites;
+    button.disabled = projectLaunching || projectRunActive || !projectInfo?.project?.compatible || !projectInfo?.enabled ||
+      !document.getElementById('project-approve')?.checked ||
+      !requirements?.kane || !requirements?.codex || !requirements?.chrome || (mode === 'gemini' && !requirements?.gemini);
+  }
+  async function loadProject(id) {
+    projectInfo = null;
+    const approval = document.getElementById('project-approve');
+    if (approval) approval.checked = false;
+    updateProjectStart();
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(id)}/preflight`, {cache:'no-store'});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Preflight failed.');
+      projectInfo = data;
+      selectedProject = id;
+      projectText('project-status', `${data.project.framework}: ${data.project.reason}`);
+      projectText('project-test', data.project.compatible ? data.test_text : 'No test approved. A project-specific adapter is required.');
+      projectText('project-test-hash', data.project.compatible ? `SHA-256: ${data.test_sha256}` : '');
+      const p = data.prerequisites;
+      projectText('project-prerequisites', `Local execution: ${data.enabled ? 'enabled' : 'disabled - set ARENA_ENABLE_LIVE_KANE=1 and restart'} | Chrome: ${p.chrome ? 'found' : 'missing'} | Kane: ${p.kane ? 'found' : 'missing'} | Codex: ${p.codex ? 'found' : 'missing'} | Gemini environment: ${p.gemini ? 'configured' : 'not configured in the Arena server - restart it from your configured terminal'}`);
+    } catch (error) {
+      projectText('project-status', error.message);
+    }
+    updateProjectStart();
+  }
+  async function importProject() {
+    const file = document.getElementById('project-zip')?.files?.[0];
+    if (!file) { projectText('project-status','Choose a source ZIP first.'); return; }
+    if (file.size > 20 * 1024 * 1024) { projectText('project-status','ZIP exceeds 20 MB. Omit dependencies and build output.'); return; }
+    projectInfo = null;
+    updateProjectStart();
+    projectText('project-status','Importing source only; no project code or install scripts are being run...');
+    const form = new FormData();
+    form.append('project',file);
+    try {
+      const response = await fetch('/api/projects/import',{method:'POST',headers:{'X-Arena-Request':'1'},body:form});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Import failed.');
+      await loadProject(data.project.id);
+    } catch (error) { projectText('project-status',error.message); }
+  }
+  async function launchProject() {
+    if (!projectInfo || projectLaunching) return;
+    projectLaunching = true;
+    updateProjectStart();
+    try {
+      const response = await fetch(`/api/projects/${selectedProject}/battle`,{
+        method:'POST',headers:{'Content-Type':'application/json','X-Arena-Request':'1'},
+        body:JSON.stringify({approved:document.getElementById('project-approve')?.checked === true,
+          test_sha256:projectInfo.test_sha256,breaker:document.getElementById('project-breaker')?.value,
+          show_browser:document.getElementById('live-show-browser')?.checked ?? true})});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Battle launch failed.');
+      projectText('project-status','Full battle started. Follow the live panel and recorded history below.');
+      projectRunActive = true;
+      document.activeElement?.blur();
+      document.getElementById('live-console-feed')?.replaceChildren();
+      clearLiveView();
+      liveStartTime = Date.now();
+      connectKaneStream();
+    } catch (error) { projectText('project-status',error.message); }
+    finally { projectLaunching = false; updateProjectStart(); }
+  }
+  document.addEventListener('click',(event)=>{
+    if (event.target.closest('#project-import')) importProject();
+    else if (event.target.closest('#project-builtin')) loadProject('builtin');
+    else if (event.target.closest('#project-start')) launchProject();
+  });
+  document.addEventListener('change',(event)=>{
+    if (event.target.matches('#project-approve, #project-breaker')) updateProjectStart();
+  });
+  loadProject('builtin');
+
   document.addEventListener('arena:archive-update', (event) => {
     const payload = event.detail;
     const script = document.getElementById('arena-payload');
     if (script) script.textContent = JSON.stringify(payload);
     if (state.activePreviewKey !== 'archive') return;
-    if (document.activeElement?.id === 'battle-search' || state.isReplayingStages || isDraggingWipe) return;
+    if (document.activeElement?.id === 'battle-search' || document.activeElement?.closest('#project-setup-panel') || state.isReplayingStages || isDraggingWipe) return;
     state.payload = payload;
     render();
   });

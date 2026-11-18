@@ -66,7 +66,8 @@ class LiveKaneSession:
                 target_url=self.target_url, current_step=self.current_step,
                 total_steps=self.total_steps, steps=self.steps,
                 latest_screenshot=self.latest_screenshot, message=self.error_message,
-                started_at=self.started_at, live_view_url=self.live_view_url)))
+                started_at=self.started_at, live_view_url=self.live_view_url,
+                phase=getattr(self, 'phase', None), battle_id=getattr(self, 'battle_id', None))))
         return listener
 
     def remove_listener(self, listener):
@@ -78,7 +79,10 @@ class LiveKaneSession:
         with self.lock:
             for listener in self.listeners:
                 if listener.full():
-                    listener.get_nowait()
+                    try:
+                        listener.get_nowait()
+                    except queue.Empty:
+                        pass
                 listener.put_nowait(copy.deepcopy(event))
 
     def run(self):

@@ -1,7 +1,7 @@
 # Local Kane monitor
 
-The new dashboard panel retains its supplied layout and styling. It is a monitor
-for one checkout acceptance run, not the complete Gemini/Codex battle loop.
+The new dashboard panel retains its supplied layout and styling. It supports the standalone checkout check and the Kane phases of a dashboard-
+launched supported full battle. See [project setup](self-service.md).
 Opening `/arena` or its event stream never starts Kane or spends credits.
 
 Launch is disabled by default. To opt in for a local demo, restart the main app
@@ -69,7 +69,8 @@ separate.
 Implementation references: [Kane's external Chrome flag](https://www.testmuai.com/docs/kane-cli-testmd-running),
 [Chrome Page.captureScreenshot](https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-captureScreenshot).
 
-This standalone check is separate from scored battle history. Its private logs
+The standalone checkout check is separate from scored battle history. Full
+dashboard-launched battles use the existing scored history and outcome rules. Its private logs
 and evidence remain local, and its state survives only for the current server
 process. Reloading reconnects to that process's current session. Restarting the
 server clears the monitor. Normal battle history remains in the existing SQLite

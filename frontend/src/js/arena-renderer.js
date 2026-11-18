@@ -300,75 +300,7 @@ function renderOverviewSection(
       </div>
 
       <div class="px-6 py-5 space-y-4">
-        <!-- Live Kane Execution & Chrome Demo Window Panel -->
-        <div id="live-kane-panel" class="border border-slate-300 bg-slate-900 text-slate-100 rounded-lg p-5 shadow-sm space-y-4">
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-3">
-            <div class="flex items-center gap-2.5">
-              <span class="relative flex h-2.5 w-2.5">
-                <span id="live-status-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 hidden"></span>
-                <span id="live-status-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-400"></span>
-              </span>
-              <h2 class="font-display text-sm font-semibold text-white tracking-wide flex items-center gap-2">
-                Live Kane CLI & Chrome Runner
-                <span id="live-status-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">Ready</span>
-              </h2>
-            </div>
-            <div class="flex flex-wrap items-center gap-3">
-              <label class="inline-flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
-                <input id="live-show-browser" type="checkbox" checked class="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-400">
-                <span>Pop-up Chrome Window</span>
-              </label>
-              <button
-                id="btn-run-kane-live"
-                type="button"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white transition-colors shadow-xs"
-              >
-                <svg class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
-                <span>Run Kane Live Test</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Configuration Inputs for Judges / Alternative Demos -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            <div>
-              <label class="block text-slate-400 mb-1 font-medium">Target App URL (Judge Demo / Custom Port)</label>
-              <input id="live-target-url" type="text" value="http://127.0.0.1:5000" class="w-full font-mono text-xs bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500">
-            </div>
-            <div>
-              <label class="block text-slate-400 mb-1 font-medium">Test Markdown File</label>
-              <input id="live-test-path" type="text" readonly value=".testmuai/tests/CheckoutConsistency_test.md" class="w-full font-mono text-xs bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500">
-            </div>
-          </div>
-
-          <!-- Live Visual Stream & Step Terminal -->
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-            <!-- Left: Browser Viewport Stream -->
-            <div class="lg:col-span-7 bg-slate-950 rounded border border-slate-800 flex flex-col items-center justify-center min-h-[220px] relative overflow-hidden group">
-              <span id="live-view-label" class="absolute top-2 left-2 z-10 rounded bg-slate-900/80 px-2 py-0.5 text-[10px] font-mono text-slate-300">Waiting for a live run</span>
-              <img id="live-stream-img" src="" alt="Verified Kane evidence screenshot" class="w-full h-auto max-h-[260px] object-contain hidden">
-              <div id="live-stream-placeholder" class="flex flex-col items-center text-center p-6 space-y-2 text-slate-500">
-                <svg class="w-8 h-8 opacity-40 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                <p class="text-xs">The same isolated Chrome that Kane controls appears here live</p>
-                <span class="text-[11px] text-slate-600">Read-only viewport feed. Do not interact with the pop-up Chrome.</span>
-              </div>
-              <div id="live-step-pill" class="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur-xs text-[10px] font-mono text-slate-300 border border-slate-700 hidden">
-                Waiting for Kane steps
-              </div>
-            </div>
-
-            <!-- Right: Real-time Step Log Terminal -->
-            <div class="lg:col-span-5 bg-slate-950 rounded border border-slate-800 flex flex-col p-3 text-xs min-h-[220px] max-h-[260px]">
-              <div class="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-800/80 text-[11px] text-slate-400 font-mono">
-                <span>EXECUTION LOG</span>
-                <span id="live-timer" class="text-slate-500 tabular-nums">00:00</span>
-              </div>
-              <div id="live-console-feed" class="flex-1 overflow-y-auto space-y-1 font-mono text-[11px] text-slate-300 leading-snug pr-1">
-                <div class="text-slate-500 italic">Ready. Local opt-in required to launch. This runs the checkout test, not a complete battle.</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        ${renderLiveRunner()}
 
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div class="space-y-0.5">
@@ -1112,6 +1044,105 @@ export function renderBattleFilterBar({ payload, outcomeFilter, counts, filtered
   `;
 }
 
+function renderProjectSetup() {
+  return `<section id="project-setup-panel" class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+    <h2 class="font-display text-lg font-semibold text-slate-900">Start a full battle</h2>
+    <p class="text-sm text-slate-600">Import source ZIP, check compatibility, approve the tests, then run. Only the validated BreakShop adapter is supported today. AI Studio / React projects can be imported for inspection; they need an adapter before execution.</p>
+    <div class="flex flex-wrap items-center gap-3">
+      <input id="project-zip" type="file" accept=".zip,application/zip" aria-label="Project source ZIP" class="text-sm text-slate-700">
+      <button id="project-import" type="button" class="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Import ZIP</button>
+      <button id="project-builtin" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Use built-in BreakShop</button>
+    </div>
+    <p id="project-status" role="status" class="text-sm text-slate-600">Checking local setup...</p>
+    <p id="project-prerequisites" class="text-xs text-slate-500"></p>
+    <details class="rounded border border-slate-200 p-3">
+      <summary class="cursor-pointer text-sm font-medium">Review the acceptance test before approval</summary>
+      <pre id="project-test" class="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-slate-700"></pre>
+      <p id="project-test-hash" class="mt-2 break-all font-mono text-[10px] text-slate-500"></p>
+    </details>
+    <div class="flex flex-wrap items-center gap-4 text-sm">
+      <label>Breaker <select id="project-breaker" class="rounded border border-slate-300 p-1"><option value="gemini">Gemini (free-tier setup required)</option><option value="scripted">Scripted (controlled demo fault)</option></select></label>
+      <label class="inline-flex items-center gap-2"><input id="project-approve" type="checkbox">I reviewed and approve this test for an isolated demo with fictional data.</label>
+      <button id="project-start" type="button" disabled class="rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Start full battle</button>
+    </div>
+    <p class="text-xs text-slate-500">Baseline → Gemini/controlled fault → Arena validation → Kane → Codex (up to 3 attempts) → Kane. Imported code never runs before approval. Source exports, keys and evidence stay local. CLI authentication and credit availability are checked during execution.</p>
+  </section>`;
+}
+
+function renderLiveRunner() {
+  return `        <!-- Live Kane Execution & Chrome Demo Window Panel -->
+        <div id="live-kane-panel" class="border border-slate-300 bg-slate-900 text-slate-100 rounded-lg p-5 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2.5">
+              <span class="relative flex h-2.5 w-2.5">
+                <span id="live-status-pulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 hidden"></span>
+                <span id="live-status-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-slate-400"></span>
+              </span>
+              <h2 class="font-display text-sm font-semibold text-white tracking-wide flex items-center gap-2">
+                Live Kane CLI & Chrome Runner
+                <span id="live-status-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">Ready</span>
+              </h2>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <label class="inline-flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none">
+                <input id="live-show-browser" type="checkbox" checked class="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-400">
+                <span>Pop-up Chrome Window</span>
+              </label>
+              <button
+                id="btn-run-kane-live"
+                type="button"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white transition-colors shadow-xs"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                <span>Run Kane Live Test</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Configuration Inputs for Judges / Alternative Demos -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1 font-medium">Target App URL (Judge Demo / Custom Port)</label>
+              <input id="live-target-url" type="text" value="http://127.0.0.1:5000" class="w-full font-mono text-xs bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1 font-medium">Test Markdown File</label>
+              <input id="live-test-path" type="text" readonly value=".testmuai/tests/CheckoutConsistency_test.md" class="w-full font-mono text-xs bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500">
+            </div>
+          </div>
+
+          <!-- Live Visual Stream & Step Terminal -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+            <!-- Left: Browser Viewport Stream -->
+            <div class="lg:col-span-7 bg-slate-950 rounded border border-slate-800 flex flex-col items-center justify-center min-h-[220px] relative overflow-hidden group">
+              <span id="live-view-label" class="absolute top-2 left-2 z-10 rounded bg-slate-900/80 px-2 py-0.5 text-[10px] font-mono text-slate-300">Waiting for a live run</span>
+              <img id="live-stream-img" src="" alt="Verified Kane evidence screenshot" class="w-full h-auto max-h-[260px] object-contain hidden">
+              <div id="live-stream-placeholder" class="flex flex-col items-center text-center p-6 space-y-2 text-slate-500">
+                <svg class="w-8 h-8 opacity-40 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <p class="text-xs">The same isolated Chrome that Kane controls appears here live</p>
+                <span class="text-[11px] text-slate-600">Read-only viewport feed. Do not interact with the pop-up Chrome.</span>
+              </div>
+              <div id="live-step-pill" class="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur-xs text-[10px] font-mono text-slate-300 border border-slate-700 hidden">
+                Waiting for Kane steps
+              </div>
+            </div>
+
+            <!-- Right: Real-time Step Log Terminal -->
+            <div class="lg:col-span-5 bg-slate-950 rounded border border-slate-800 flex flex-col p-3 text-xs min-h-[220px] max-h-[260px]">
+              <div class="flex items-center justify-between pb-1.5 mb-2 border-b border-slate-800/80 text-[11px] text-slate-400 font-mono">
+                <span>EXECUTION LOG</span>
+                <span id="live-timer" class="text-slate-500 tabular-nums">00:00</span>
+              </div>
+              <div id="live-console-feed" class="flex-1 overflow-y-auto space-y-1 font-mono text-[11px] text-slate-300 leading-snug pr-1">
+                <div class="text-slate-500 italic">Ready. Run Kane Live Test starts a standalone check. Start full battle above runs the full loop after approval.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+`;
+}
+
 export function renderArenaDashboard(state) {
   const {
     payload,
@@ -1128,7 +1159,7 @@ export function renderArenaDashboard(state) {
     wipePercent,
   } = state;
 
-  const parts = [renderWorkspaceBanner(payload, activePreviewKey)];
+  const parts = [renderWorkspaceBanner(payload, activePreviewKey), ...(activePreviewKey === 'archive' ? [renderProjectSetup()] : [])];
 
   if (payload.status === 'loading') {
     parts.push(renderLoadingState());
@@ -1141,6 +1172,7 @@ export function renderArenaDashboard(state) {
   }
 
   if (payload.status === 'empty' || !Array.isArray(payload.battles) || payload.battles.length === 0) {
+    if (activePreviewKey === 'archive') parts.push(renderLiveRunner());
     parts.push(renderEmptyState());
     return parts.join('\n');
   }

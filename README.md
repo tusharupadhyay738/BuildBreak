@@ -108,8 +108,8 @@ selected independent invariant. These guards are not an OS sandbox.
 The optional local Kane panel now displays the actual viewport of the isolated
 Chrome browser that Kane controls, alongside live numbered test steps. It uses a
 fresh browser profile and a local image feed; it does not capture your desktop or
-normal Chrome profile. The panel is read-only and runs the existing checkout test,
-not a full Gemini/Codex battle.
+normal Chrome profile. The viewport is read-only. You can run a standalone checkout check or launch a
+full supported battle through the separate project setup controls.
 
 The feed refreshes roughly up to twice per second. It is labeled **LIVE** during
 the run and switches to **RECORDED - verified evidence** after the final pack
@@ -160,8 +160,8 @@ The two JPEGs are unchanged copies of selected frames. See
 </details>
 
 Raw packs, logs, cookies, credentials, databases and caches stay out of Git.
-Only the reviewed demo images are included here. Local previews are recorded
-screenshots; Arena does not embed live browser video.
+Only the reviewed demo images are included here. Archived previews are recorded screenshots. A separate, clearly labeled local
+Chrome viewport feed is available during dashboard-launched runs.
 
 ## Quickstart
 
@@ -196,6 +196,18 @@ creating fake history. A real battle records its own results automatically.
 Orders persist in ignored `instance/shop.sqlite3`. A random development session
 secret is created on startup. Set a private `SECRET_KEY` environment variable
 for session continuity if needed. Flask's development server is for this local demo.
+
+## Launch through the dashboard
+
+Open `/arena`, choose **Use built-in BreakShop** or **Import ZIP**, read the
+compatibility/setup report, review the acceptance test and check its approval
+box. Then choose Gemini or the labeled scripted demo and click **Start full
+battle**. The same protected runner drives fault injection, validation, Kane,
+Codex repair and Kane re-verification, with live viewport updates in each phase.
+
+**Current import limit:** only the known BreakShop adapter can execute. React / AI
+Studio ZIPs are inspection-only until a project-specific adapter is implemented.
+This is not universal project support. [Judge workflow and setup](docs/guides/self-service.md).
 
 ## Run a real battle
 
@@ -233,8 +245,9 @@ own isolated app; your main shop is preserved.
 
 Keep the main app running in a separate terminal and open `/arena` to follow
 recorded progress. By default the dashboard is read-only. An optional local-only
-Kane monitor can run the existing protected checkout test after an explicit click;
-it cannot launch a Breaker or Builder or start a complete battle. See
+project setup controls can now launch a complete supported battle after explicit
+acceptance-test approval. The standalone checkout monitor remains available. See
+[self-service setup and current adapter limits](docs/guides/self-service.md) and
 [local Kane monitor](docs/guides/live-kane-monitor.md).
 
 | Mode | When to use it |

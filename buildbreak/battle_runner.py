@@ -100,7 +100,7 @@ def snapshot(source, destination):
              'buildbreak/__init__.py', 'buildbreak/arena.py', 'buildbreak/import_battle.py',
              'buildbreak/battle_history.py', 'buildbreak/evidence_images.py', 'buildbreak/console_payload.py',
              'buildbreak/kane_live.py',
-             'buildbreak/live_browser.py',
+             'buildbreak/live_browser.py', 'buildbreak/project_import.py', 'buildbreak/project_setup.py',
              'requirements.txt', TEST.as_posix()]
     for folder in ('templates', 'static'):
         files += [p.relative_to(source).as_posix() for p in (source / folder).rglob('*') if p.is_file()]
@@ -539,7 +539,8 @@ def battle_exit_code(state):
     return 3
 
 def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cached_fault=None,
-               omit_kane_feedback=False, show_browser=False):
+               omit_kane_feedback=False, show_browser=False, database=None, artifacts_root=None,
+               on_battle=None, on_event=None, verification_runner=None):
     if not 1 <= max_attempts <= MAX_ATTEMPTS:
         raise ValueError('Repair attempts must be between 1 and 3')
     if breaker not in {'scripted', 'codex', 'gemini', 'cached'} or builder not in {'human', 'codex'}:
@@ -558,7 +559,7 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
     kane = executable('kane-cli')
     codex = executable('codex') if 'codex' in (breaker, builder) else None
     battle = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S') + '-' + uuid.uuid4().hex[:8]
-    private = root / 'instance/battles' / battle
+    private = (Path(artifacts_root) if artifacts_root is not None else root / 'instance/battles') / battle
     private.mkdir(parents=True)
     workspace = private / 'workspace'
     workspace.mkdir()
@@ -569,26 +570,32 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
     shutil.copyfile(root / 'app.py', private / 'original-app.py')
     revision = command(['git', 'rev-parse', 'HEAD'], root).stdout.strip()
     baseline = f'{revision} + explicit snapshot {digest(private / "baseline-manifest.json")[:12]}'
-    database = root / 'instance/arena.sqlite3'
+    database = Path(database) if database is not None else root / 'instance/arena.sqlite3'
     with connect(database) as db:
         db.execute('INSERT INTO arena_sessions VALUES (?,?,?,?,?,0)',
                    (battle, now(), 'prepared', baseline, f'{breaker} Breaker / {builder} Builder' +
                     (' / requirements-only ablation' if experiment else '')))
         save_details(db, battle, requested=breaker, max_attempts=max_attempts, experiment=experiment)
-    event(database, battle, 'prepared', 'Isolated source snapshot and private database prepared.', 'prepared')
+    if on_battle:
+        on_battle(battle)
+    def emit(kind, message, state=None):
+        event(database, battle, kind, message, state)
+        if on_event:
+            on_event(kind, message, state)
+    emit('prepared', 'Isolated source snapshot and private database prepared.', 'prepared')
     python = str(root / '.venv/Scripts/python.exe') if os.name == 'nt' else sys.executable
     if not Path(python).is_file():
         python = sys.executable
     server = Server(workspace, private, python)
     def verify(phase, attempt):
         check_protected(workspace, manifest, allow_app=phase != 'baseline')
-        event(database, battle, 'kane_started', f'Kane {phase} verification started.', 'verifying')
-        result = run_kane(workspace, private / f'{phase}-{attempt}', server.url,
+        emit('kane_started', f'Kane {phase} verification started.', 'verifying')
+        result = (verification_runner or run_kane)(workspace, private / f'{phase}-{attempt}', server.url,
                           'Arena' + battle.replace('-', '') + phase + str(attempt), kane,
                           **({'show_browser': True} if show_browser else {}))
         check_protected(workspace, manifest, allow_app=phase != 'baseline')
         record_run(database, battle, phase, attempt, result)
-        event(database, battle, 'kane_finished', f'Kane {phase}: {result["result"]}.')
+        emit('kane_finished', f'Kane {phase}: {result["result"]}.')
         return result
     try:
         if breaker in {'gemini', 'cached'}:
@@ -597,24 +604,24 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
             tests = json_command(python, TEST_SCRIPT, workspace, baseline_checks, 'app-tests')
             if (tests['run'] < 1 or any(tests[key] for key in
                     ('failures', 'errors', 'skipped', 'expected_failures', 'unexpected_successes'))):
-                event(database, battle, 'stopped', 'Healthy application tests did not all pass; no mutation proposed.', 'baseline_blocked')
+                emit('stopped', 'Healthy application tests did not all pass; no mutation proposed.', 'baseline_blocked')
                 return battle
             observation = direct_check(workspace, baseline_checks / 'direct', python)
             if not observation['passed']:
-                event(database, battle, 'stopped', 'Healthy direct checkout invariant failed; no mutation proposed.', 'baseline_blocked')
+                emit('stopped', 'Healthy direct checkout invariant failed; no mutation proposed.', 'baseline_blocked')
                 return battle
             validate_protected(workspace, manifest)
-            event(database, battle, 'direct_baseline_passed', 'Independent healthy checkout check passed: saved amounts 4497 / 450 / 4047 cents.')
+            emit('direct_baseline_passed', 'Independent healthy checkout check passed: saved amounts 4497 / 450 / 4047 cents.')
         server.start()
         result = verify('baseline', 0)
         if result['result'] != 'passed':
-            event(database, battle, 'stopped', 'Baseline did not pass; no fault was introduced.', 'baseline_blocked')
+            emit('stopped', 'Baseline did not pass; no fault was introduced.', 'baseline_blocked')
             return battle
         server.stop()
         if breaker == 'gemini':
             selection, candidate = select_gemini_fault(
                 workspace, private, python, manifest,
-                lambda kind, message: event(database, battle, kind, message))
+                lambda kind, message: emit(kind, message))
             selection['source'] = 'controlled' if selection['fallback'] else 'live'
         elif breaker == 'cached':
             candidate = validate_fault(workspace, private / 'fault-validation-cached',
@@ -641,7 +648,7 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
                              source=selection['source'], model=selection.get('model'),
                              cache_id=selection.get('cache_id'), validated=True,
                              family=family, invariant=INVARIANTS[family], experiment=experiment)
-            event(database, battle, 'fault_seeded',
+            emit('fault_seeded',
                   ('Cached Gemini fault' if breaker == 'cached' else
                    'Gemini-generated fault' if not selection['fallback'] else 'Controlled fallback fault') +
                   ' applied after independent validation. Patch and description are private.', 'fault_seeded')
@@ -649,31 +656,31 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
             apply_fault(workspace, selection['fault'])
             with connect(database) as db:
                 save_details(db, battle, requested=breaker, producer=breaker, source='controlled', experiment=experiment)
-            event(database, battle, 'fault_seeded', 'Controlled fault applied. Selection and patch are private.', 'fault_seeded')
+            emit('fault_seeded', 'Controlled fault applied. Selection and patch are private.', 'fault_seeded')
         server.start()
         result = verify('before', 0)
         if result['result'] != 'verification_failed':
             message = ('Independently validated fault escaped the selected Kane checks; no repair attempted.'
                        if breaker in {'gemini', 'cached'} and result['result'] == 'passed'
                        else 'No confirmed failing assertion; repair was not started.')
-            event(database, battle, 'stopped', message, 'not_detected' if result['result'] == 'passed' else 'infrastructure_error')
+            emit('stopped', message, 'not_detected' if result['result'] == 'passed' else 'infrastructure_error')
             return battle
         handoff = ('Repair only workspace/app.py using the requirements in the frozen checkout test. '
                    'Do not inspect fault.json, original-app.py, or other projects. '
                    'Kane observed:\n' + result['failure'])
         (private / 'handoff.txt').write_text(handoff, encoding='utf-8')
         if builder == 'human':
-            event(database, battle, 'handoff_ready', 'Genuine failure handoff prepared; human-triggered repair is pending.', 'awaiting_builder')
+            emit('handoff_ready', 'Genuine failure handoff prepared; human-triggered repair is pending.', 'awaiting_builder')
             return battle
         test_failure = ''
         if experiment:
-            event(database, battle, 'ablation',
+            emit('ablation',
                   'Requirements-only Builder ablation: Kane feedback withheld; one attempt; excluded from drill scores.')
         for attempt in range(1, max_attempts + 1):
             server.stop()
             with connect(database) as db:
                 db.execute('UPDATE arena_sessions SET attempts=? WHERE id=?', (attempt, battle))
-            event(database, battle, 'builder_started', f'Builder repair attempt {attempt} of {max_attempts}.', 'repairing')
+            emit('builder_started', f'Builder repair attempt {attempt} of {max_attempts}.', 'repairing')
             repair_artifacts = private / f'builder-{attempt}'
             try:
                 if omit_kane_feedback:
@@ -686,7 +693,7 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
                 test_failure = 'Previous repair was rejected: ' + str(error)
                 repair_artifacts.mkdir(parents=True, exist_ok=True)
                 (repair_artifacts / 'rejection.txt').write_text(test_failure, encoding='utf-8')
-                event(database, battle, 'builder_rejected', f'Attempt {attempt} proposed an invalid repair; original candidate was not applied.')
+                emit('builder_rejected', f'Attempt {attempt} proposed an invalid repair; original candidate was not applied.')
                 continue
             (workspace / 'app.py').write_text(source, encoding='utf-8')
             tests = command([python, '-m', 'unittest', 'discover', '-v'], workspace, timeout=120,
@@ -695,7 +702,7 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
             (private / f'builder-{attempt}' / 'unit-tests.log').write_text(test_failure, encoding='utf-8')
             check_protected(workspace, manifest, allow_app=True)
             if tests.returncode:
-                event(database, battle, 'unit_tests_failed', f'Attempt {attempt} failed automated tests; no verified repair claimed.')
+                emit('unit_tests_failed', f'Attempt {attempt} failed automated tests; no verified repair claimed.')
                 continue
             if breaker in {'gemini', 'cached'}:
                 try:
@@ -703,7 +710,7 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
                                                family=family)
                 except InvalidFault:
                     test_failure = 'Independent check could not complete; repair is unverified.'
-                    event(database, battle, 'direct_check_failed', f'Attempt {attempt} could not complete the selected direct check.')
+                    emit('direct_check_failed', f'Attempt {attempt} could not complete the selected direct check.')
                     continue
                 check_protected(workspace, manifest, allow_app=True)
                 if not observation['passed']:
@@ -711,23 +718,23 @@ def run_battle(root=ROOT, breaker='gemini', builder='human', max_attempts=3, cac
                                      str(observation['actual_cents'])) if family == 'pricing' else
                                     'Cart must accept 99, reject 100 without changing the cart, and remove at zero. '
                                     'Observed: ' + str(observation['actual']))
-                    event(database, battle, 'direct_check_failed', f'Attempt {attempt} did not restore the selected independent invariant.')
+                    emit('direct_check_failed', f'Attempt {attempt} did not restore the selected independent invariant.')
                     continue
-                event(database, battle, 'direct_check_passed', f'Attempt {attempt} restored the selected independent invariant; Kane still pending.')
-            event(database, battle, 'unit_tests_passed', f'Attempt {attempt} passed automated tests; Kane verification pending.')
+                emit('direct_check_passed', f'Attempt {attempt} restored the selected independent invariant; Kane still pending.')
+            emit('unit_tests_passed', f'Attempt {attempt} passed automated tests; Kane verification pending.')
             server.start()
             result = verify('after', attempt)
             if result['result'] == 'passed':
-                event(database, battle, 'completed', 'Kane verified the repaired checkout and confirmation reload.', 'completed')
+                emit('completed', 'Kane verified the repaired checkout and confirmation reload.', 'completed')
                 return battle
             if result['result'] == 'infrastructure_error':
-                event(database, battle, 'stopped', 'Infrastructure failure prevented verification; no repair victory claimed.', 'infrastructure_error')
+                emit('stopped', 'Infrastructure failure prevented verification; no repair victory claimed.', 'infrastructure_error')
                 return battle
-        event(database, battle, 'attempt_limit', 'Repair attempt limit reached; human review required.', 'needs_human')
+        emit('attempt_limit', 'Repair attempt limit reached; human review required.', 'needs_human')
         return battle
     except Exception as error:
         (private / 'error.txt').write_text(str(error), encoding='utf-8')
-        event(database, battle, 'error', 'Battle stopped with an error; inspect private local logs.', 'infrastructure_error')
+        emit('error', 'Battle stopped with an error; inspect private local logs.', 'infrastructure_error')
         raise
     finally:
         server.stop()
