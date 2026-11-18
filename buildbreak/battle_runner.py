@@ -101,6 +101,7 @@ def snapshot(source, destination):
              'buildbreak/battle_history.py', 'buildbreak/evidence_images.py', 'buildbreak/console_payload.py',
              'buildbreak/kane_live.py',
              'buildbreak/live_browser.py', 'buildbreak/project_import.py', 'buildbreak/project_setup.py',
+             'buildbreak/seatpilot_adapter.py', 'buildbreak/seatpilot_runner.py',
              'requirements.txt', TEST.as_posix()]
     for folder in ('templates', 'static'):
         files += [p.relative_to(source).as_posix() for p in (source / folder).rglob('*') if p.is_file()]
@@ -158,7 +159,7 @@ class Server:
                 raise RuntimeError('Isolated Flask server exited before readiness')
             try:
                 with urllib.request.urlopen(self.url, timeout=1) as response:
-                    if response.status == 200 and b'BreakShop' in response.read() and self.process.poll() is None:
+                    if response.status == 200 and getattr(self, 'ready_marker', b'BreakShop') in response.read() and self.process.poll() is None:
                         return
             except OSError:
                 pass
@@ -290,10 +291,13 @@ def find_evidence_pack(events, workspace):
     return None, None, None
 
 
-def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=False, on_line=None, cdp_endpoint=None):
+def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=False, on_line=None, cdp_endpoint=None, test_path=TEST):
+    test_path = Path(test_path)
+    if test_path not in {TEST, Path('.testmuai/tests/SeatPilotBooking_test.md')}:
+        raise ValueError('Unknown protected acceptance suite')
     artifacts.mkdir(parents=True, exist_ok=False)
-    test_hash = digest(workspace / TEST)
-    args = [kane, 'testmd', 'run', str(TEST), '--override-start-url', url,
+    test_hash = digest(workspace / test_path)
+    args = [kane, 'testmd', 'run', str(test_path), '--override-start-url', url,
             '--target', 'desktop', '--no-adaptive-heal',
             '--timeout', '300', '--name', name, '--agent']
     if not show_browser:
@@ -325,7 +329,7 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=F
                 events.append(value)
         except ValueError:
             pass
-    if digest(workspace / TEST) != test_hash:
+    if digest(workspace / test_path) != test_hash:
         raise ValueError('Kane test definition changed during execution')
     result = 'infrastructure_error' if timed_out else classify_kane(events, exit_code)
     evidence, pack, evidence_source = find_evidence_pack(events, workspace)
@@ -335,7 +339,7 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=F
         pack_hash = digest(artifacts / 'run.evidence')
         if pack_hash != digest(pack):
             raise ValueError('Evidence copy differs from source')
-    generated = workspace / '.testmuai/tests/output-CheckoutConsistency'
+    generated = workspace / '.testmuai/tests' / ('output-' + test_path.name.removesuffix('_test.md'))
     summaries = [e for e in events if e.get('type') == 'test_md_summary']
     replaced = bool(summaries and summaries[-1].get('artifacts', {}).get('replaced'))
     if generated.is_dir():

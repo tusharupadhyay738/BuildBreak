@@ -40,6 +40,10 @@ def prepare_source(folder, record, destination):
     source = folder / 'source'
     if not record['compatible'] or not inspect_project(source, ROOT)['compatible']:
         raise ValueError('This source does not have a supported battle adapter.')
+    if record.get('adapter') == 'seatpilot':
+        from .seatpilot_adapter import prepare_runtime
+        prepare_runtime(destination)
+        return
     snapshot(ROOT, destination)
     # Only app/templates/static are imported; acceptance tests and runner come
     # from our canonical supported adapter, never from uploaded tests/scripts.
@@ -51,10 +55,13 @@ def prepare_source(folder, record, destination):
 
 
 class BattleSession(kane_live.LiveKaneSession):
-    def __init__(self, source, database, artifacts, breaker, show_browser):
+    def __init__(self, source, database, artifacts, breaker, show_browser, adapter_name='breakshop'):
         super().__init__('http://127.0.0.1:5000', show_browser=show_browser)
         self.source, self.database, self.artifacts = source, database, artifacts
         self.breaker, self.phase = breaker, None
+        self.adapter_name = adapter_name
+        if adapter_name == 'seatpilot':
+            self.test_path = '.testmuai/tests/SeatPilotBooking_test.md'
 
     def bind(self, battle):
         self.id = battle
@@ -72,7 +79,7 @@ class BattleSession(kane_live.LiveKaneSession):
         self.target_url = url
         self.current_step, self.steps = 0, []
         self.latest_screenshot, self.screenshot = None, None
-        self.broadcast(dict(type='phase', phase=self.phase, attempt=int(attempt)))
+        self.broadcast(dict(type='phase', phase=self.phase, attempt=int(attempt), test_path=self.test_path))
         directory = artifacts.parent / ('browser-' + artifacts.name)
         directory.mkdir()
         self.browser = LiveBrowser(directory, url, self.show_browser, self.browser_state)
@@ -80,7 +87,8 @@ class BattleSession(kane_live.LiveKaneSession):
             self.browser.start()
             result = run_kane(workspace, artifacts, url, name, kane,
                               show_browser=self.show_browser, on_line=self.handle_line,
-                              cdp_endpoint=self.browser.endpoint)
+                              cdp_endpoint=self.browser.endpoint,
+                              **({'test_path': Path('.testmuai/tests/SeatPilotBooking_test.md')} if self.adapter_name == 'seatpilot' else {}))
         finally:
             self.browser.close()
         self.screenshot = screenshot_for(self.artifacts, self.id,
@@ -92,6 +100,8 @@ class BattleSession(kane_live.LiveKaneSession):
 
     def run(self):
         from .battle_runner import run_battle
+        if self.adapter_name == 'seatpilot':
+            from .seatpilot_runner import run_battle
         self.started_at = time.time()
         self.broadcast(dict(type='status', status='running', message='Full battle started. Source stays isolated; do not interact with Kane Chrome.'))
         try:
@@ -116,11 +126,11 @@ class BattleSession(kane_live.LiveKaneSession):
             self.broadcast(dict(type='status', status=self.status, result=self.result, message=self.error_message))
 
 
-def start_battle(source, database, artifacts, breaker, show_browser):
+def start_battle(source, database, artifacts, breaker, show_browser, adapter_name='breakshop'):
     with kane_live._SESSION_LOCK:
         if kane_live._ACTIVE_SESSION and kane_live._ACTIVE_SESSION.status == 'running':
             raise ValueError('A run is active. Wait for it to finish.')
-        session = BattleSession(source, database, artifacts, breaker, show_browser)
+        session = BattleSession(source, database, artifacts, breaker, show_browser, adapter_name)
         kane_live._ACTIVE_SESSION = session
         session.thread = threading.Thread(target=session.run, daemon=True)
         session.thread.start()
@@ -146,11 +156,16 @@ def register_project_routes(app, require_local_viewer):
                           reason='Built-in BreakShop demo with a validated adapter.')
         else:
             _, record = load_project(app.config['ARENA_PROJECTS'], project_id)
-        test = (ROOT / kane_live.TEST_PATH).read_bytes()
-        return dict(project=record, prerequisites=prerequisites(), enabled=bool(app.config['ARENA_ENABLE_LIVE_KANE']),
+        test_path = (Path('.testmuai/tests/SeatPilotBooking_test.md') if record.get('adapter')=='seatpilot'
+                     else Path(kane_live.TEST_PATH))
+        test = (ROOT / test_path).read_bytes()
+        requirements = prerequisites()
+        if record.get('adapter')=='seatpilot':
+            requirements['node'] = bool(shutil.which('node')) and bool(shutil.which('npm.cmd') or shutil.which('npm'))
+        return dict(project=record, prerequisites=requirements, enabled=bool(app.config['ARENA_ENABLE_LIVE_KANE']),
                     test_text=test.decode('utf-8'), test_sha256=hashlib.sha256(test).hexdigest(),
                     authentication='CLI presence only; authentication and account allowances are checked by the real run.',
-                    supported='BreakShop adapter only. AI Studio/React imports require a project-specific adapter before a battle can run.')
+                    supported='BreakShop and the recognized SeatPilot export have explicit adapters. Other React apps still require an adapter.')
 
     @app.post('/api/projects/import')
     def api_project_import():
@@ -190,6 +205,8 @@ def register_project_routes(app, require_local_viewer):
             if breaker not in {'gemini', 'scripted'} or type(data.get('show_browser', True)) is not bool:
                 raise ValueError('Select Gemini or scripted mode and a browser boolean.')
             needed = ['chrome', 'kane', 'codex'] + (['gemini'] if breaker == 'gemini' else [])
+            if info['project'].get('adapter')=='seatpilot':
+                needed += ['node']
             if not all(info['prerequisites'][name] for name in needed):
                 raise ValueError('Setup incomplete. Install/sign in to Kane and Codex. For Gemini, restart Arena from a shell with GEMINI_API_KEY, GEMINI_MODEL and free-tier confirmation configured. Keys are never accepted or stored by this form.')
             if kane_live.get_active_session() and kane_live.get_active_session().status == 'running':
@@ -202,7 +219,8 @@ def register_project_routes(app, require_local_viewer):
                 source = folder / ('prepared-' + uuid.uuid4().hex)
                 prepare_source(folder, record, source)
             session = start_battle(source, Path(app.config['ARENA_DATABASE']),
-                Path(app.config['ARENA_ARTIFACTS']), breaker, data.get('show_browser', True))
+                Path(app.config['ARENA_ARTIFACTS']), breaker, data.get('show_browser', True),
+                **({'adapter_name':'seatpilot'} if info['project'].get('adapter')=='seatpilot' else {}))
             return app.json.response(status=session.status)
         except (ValueError, OSError) as error:
             # Validation messages are local fixed strings, never raw subprocess logs.

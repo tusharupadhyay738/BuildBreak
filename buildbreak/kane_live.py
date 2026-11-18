@@ -63,7 +63,7 @@ class LiveKaneSession:
                 raise ValueError('Too many live viewers.')
             self.listeners.append(listener)
             listener.put(copy.deepcopy(dict(type='snapshot', status=self.status,
-                target_url=self.target_url, current_step=self.current_step,
+                target_url=self.target_url, test_path=self.test_path, current_step=self.current_step,
                 total_steps=self.total_steps, steps=self.steps,
                 latest_screenshot=self.latest_screenshot, message=self.error_message,
                 started_at=self.started_at, live_view_url=self.live_view_url,

@@ -716,6 +716,10 @@ export function initArenaDashboard() {
   }
 
   function handleLiveKaneEvent(event) {
+    if (['.testmuai/tests/CheckoutConsistency_test.md','.testmuai/tests/SeatPilotBooking_test.md'].includes(event.test_path)) {
+      const field = document.getElementById('live-test-path');
+      if (field) field.value = event.test_path;
+    }
     if (event.type === 'battle') {
       followFullBattle(event.battle_id);
     } else if (event.type === 'snapshot') {
@@ -804,7 +808,7 @@ export function initArenaDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Arena-Request': '1' },
         body: JSON.stringify({target_url: target?.value.trim() || 'http://127.0.0.1:5000',
-          test_path: test?.value.trim() || '.testmuai/tests/CheckoutConsistency_test.md',
+          test_path: '.testmuai/tests/CheckoutConsistency_test.md',
           show_browser: browser?.checked ?? true})
       });
       const data = await response.json();
@@ -844,7 +848,7 @@ export function initArenaDashboard() {
     const requirements = projectInfo?.prerequisites;
     button.disabled = projectLaunching || projectRunActive || !projectInfo?.project?.compatible || !projectInfo?.enabled ||
       !document.getElementById('project-approve')?.checked ||
-      !requirements?.kane || !requirements?.codex || !requirements?.chrome || (mode === 'gemini' && !requirements?.gemini);
+      !requirements?.kane || !requirements?.codex || !requirements?.chrome || requirements?.node === false || (mode === 'gemini' && !requirements?.gemini);
   }
   async function loadProject(id) {
     projectInfo = null;
@@ -861,7 +865,7 @@ export function initArenaDashboard() {
       projectText('project-test', data.project.compatible ? data.test_text : 'No test approved. A project-specific adapter is required.');
       projectText('project-test-hash', data.project.compatible ? `SHA-256: ${data.test_sha256}` : '');
       const p = data.prerequisites;
-      projectText('project-prerequisites', `Local execution: ${data.enabled ? 'enabled' : 'disabled - set ARENA_ENABLE_LIVE_KANE=1 and restart'} | Chrome: ${p.chrome ? 'found' : 'missing'} | Kane: ${p.kane ? 'found' : 'missing'} | Codex: ${p.codex ? 'found' : 'missing'} | Gemini environment: ${p.gemini ? 'configured' : 'not configured in the Arena server - restart it from your configured terminal'}`);
+      projectText('project-prerequisites', `Local execution: ${data.enabled ? 'enabled' : 'disabled - set ARENA_ENABLE_LIVE_KANE=1 and restart'} | Chrome: ${p.chrome ? 'found' : 'missing'} | Kane: ${p.kane ? 'found' : 'missing'} | Codex: ${p.codex ? 'found' : 'missing'} ${p.node === undefined ? '' : ` | SeatPilot Node/npm: ${p.node ? 'found' : 'missing'}`} | Gemini environment: ${p.gemini ? 'configured' : 'not configured in the Arena server - restart it from your configured terminal'}`);
     } catch (error) {
       projectText('project-status', error.message);
     }

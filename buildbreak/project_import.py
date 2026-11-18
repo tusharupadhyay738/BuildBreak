@@ -39,6 +39,10 @@ def inspect_project(folder, canonical):
                     reason='This application needs its own validated fault families, direct invariant and acceptance tests. No imported code was run.')
     packages = sorted(folder.rglob('package.json'))
     if packages:
+        from .seatpilot_adapter import matches_export
+        if matches_export(folder):
+            return dict(framework='SeatPilot React + Flask API', adapter='seatpilot', compatible=True,
+                        reason='Recognized SeatPilot export. The reviewed adapter supplies a real booking API, strict client, independent invariant and separate locked booking test.')
         try:
             package = json.loads(packages[0].read_text(encoding='utf-8'))
             if not isinstance(package, dict):

@@ -41,3 +41,7 @@ secrets/
 # Keep local Kane evidence and generated run outputs out of Git
 /.testmuai/evidence/
 /.testmuai/tests/output-*/
+
+# SeatPilot trusted adapter build outputs
+/examples/seatpilot/frontend/node_modules/
+/examples/seatpilot/frontend/dist/

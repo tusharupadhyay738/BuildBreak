@@ -35,7 +35,10 @@ remaining credits or API availability. Execution reports actual failures.
 
 1. Open `/arena` locally. The setup controls work even with empty battle history.
 2. Choose the built-in BreakShop demo, or upload a source ZIP (maximum 20 MB,
-   expanded maximum 80 MB; exclude dependencies and build artifacts).
+   expanded maximum 80 MB; exclude dependencies and build artifacts). The exact
+   SeatPilot AI Studio export in this repository is recognized by a reviewed
+   source manifest. Its ZIP can include the ordinary source files; `.env.example`
+   is excluded, and dependencies/build output should be omitted.
 3. Read compatibility and prerequisite checks. Unsupported imports are inspection
    only, with no install scripts, application startup or agent execution.
 4. Open the acceptance test, review its scope and hash, and explicitly check the
@@ -51,21 +54,21 @@ remaining credits or API availability. Execution reports actual failures.
 
 ## Supported imports and remaining work
 
-**The only executable adapter currently is BreakShop.** An imported app must have
-the same Python application AST as the canonical healthy BreakShop and include
-its shop and confirmation templates. Static markup/assets can differ; Jinja
-execution structure must match the canonical templates. Other uploaded templates
-are never substituted into the runner. The
-runner supplies its own canonical tests and modules; uploaded acceptance tests,
-runners and install scripts are never trusted as the verification authority.
-This is compatibility checking, not a universal sandbox for arbitrary code.
+**Two explicit adapters can run:** the built-in BreakShop app and the exact
+recognized SeatPilot source export. BreakShop imports must match the canonical
+Python application AST and keep the expected Jinja execution structure. The
+SeatPilot adapter supplies a reviewed Flask API, separate fixed Kane test and
+independent saved-booking/inventory invariant. It builds the React UI from the
+reviewed repository copy; only the API client and the sample-booking label differ
+from the supplied design source. The uploaded ZIP's scripts and dependencies are
+never executed or installed. Its accepted source must match the known manifest.
 
-AI Studio React/JavaScript exports are detected and stored for inspection, but
-**cannot run a battle yet**. A project-specific startup adapter, explicit fault
-allowlist, independent direct invariant and approved acceptance test must be
-implemented and verified from the real export first. No ZIP has been supplied
-for the user's new AI Studio site yet. URL-only fault injection/repair is not
-supported: modifying an isolated source copy requires source code.
+This is not general React or arbitrary-project support. Other imports remain
+inspection-only until they have their own reviewed startup adapter, explicit
+fault allowlist, independent direct invariant and locked acceptance test. URL-only
+fault injection/repair is not supported: changing an isolated app requires source
+code. SeatPilot is fictional demo data with no real payments, and a live Kane
+battle on the uploaded SeatPilot site has not yet been recorded.
 
 Known environment/key files, Git metadata, dependencies, databases, evidence and
 caches are excluded from imports. ZIP paths, symlinks, encryption, duplicate names

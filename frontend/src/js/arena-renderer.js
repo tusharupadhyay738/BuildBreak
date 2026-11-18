@@ -1047,7 +1047,7 @@ export function renderBattleFilterBar({ payload, outcomeFilter, counts, filtered
 function renderProjectSetup() {
   return `<section id="project-setup-panel" class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
     <h2 class="font-display text-lg font-semibold text-slate-900">Start a full battle</h2>
-    <p class="text-sm text-slate-600">Import source ZIP, check compatibility, approve the tests, then run. Only the validated BreakShop adapter is supported today. AI Studio / React projects can be imported for inspection; they need an adapter before execution.</p>
+    <p class="text-sm text-slate-600">Import source ZIP, check compatibility, approve the tests, then run. BreakShop and the recognized SeatPilot export have validated adapters. Other React projects need their own adapter before execution. SeatPilot uses a real Flask booking API; fixture fallback is disabled.</p>
     <div class="flex flex-wrap items-center gap-3">
       <input id="project-zip" type="file" accept=".zip,application/zip" aria-label="Project source ZIP" class="text-sm text-slate-700">
       <button id="project-import" type="button" class="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Import ZIP</button>
@@ -1102,11 +1102,11 @@ function renderLiveRunner() {
           <!-- Configuration Inputs for Judges / Alternative Demos -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             <div>
-              <label class="block text-slate-400 mb-1 font-medium">Target App URL (Judge Demo / Custom Port)</label>
+              <label class="block text-slate-400 mb-1 font-medium">Standalone check URL (BreakShop)</label>
               <input id="live-target-url" type="text" value="http://127.0.0.1:5000" class="w-full font-mono text-xs bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500">
             </div>
             <div>
-              <label class="block text-slate-400 mb-1 font-medium">Test Markdown File</label>
+              <label class="block text-slate-400 mb-1 font-medium">Acceptance suite for the current run</label>
               <input id="live-test-path" type="text" readonly value=".testmuai/tests/CheckoutConsistency_test.md" class="w-full font-mono text-xs bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500">
             </div>
           </div>

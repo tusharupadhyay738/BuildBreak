@@ -28,8 +28,9 @@ asks Kane to verify the browser behavior, and records what actually happened.
 If the test misses a proven defect, Arena records an escape. If repair does not
 succeed within the attempt limit, it requests human review.
 
-**Arena is the tool. BreakShop is its currently supported demonstration app.**
-It is not yet a runner for arbitrary websites or production incident prediction.
+**Arena is the tool. BreakShop and the recognized SeatPilot AI Studio export
+have explicit local demo adapters.** This does not make Arena a runner for
+arbitrary websites or a production incident predictor.
 
 ## Repository map
 
@@ -205,9 +206,11 @@ box. Then choose Gemini or the labeled scripted demo and click **Start full
 battle**. The same protected runner drives fault injection, validation, Kane,
 Codex repair and Kane re-verification, with live viewport updates in each phase.
 
-**Current import limit:** only the known BreakShop adapter can execute. React / AI
-Studio ZIPs are inspection-only until a project-specific adapter is implemented.
-This is not universal project support. [Judge workflow and setup](docs/guides/self-service.md).
+**Current import limit:** Arena executes the built-in BreakShop app and the exact
+recognized SeatPilot source export. The SeatPilot adapter keeps its visual design,
+uses a real local Flask API and disables demo-fixture fallback. It does not run
+arbitrary React projects or the uploaded ZIP's package scripts. A live Kane battle
+on SeatPilot has not yet been recorded. [Judge workflow and setup](docs/guides/self-service.md).
 
 ## Run a real battle
 
@@ -274,6 +277,7 @@ created locally; caches are not bundled in a clone.
 | Builder feedback comparison | [Requirements-only ablation option](docs/guides/builder-ablation.md), one attempt and excluded from scores. No live comparison yet. |
 | Requirements-to-test workflow | [Manual Kane feasibility gate](docs/evidence/kane-feasibility.md): partial exploration, approved requirements fallback, eight generated browser steps passed once. Not automatic onboarding. |
 | Screenshot dashboard | Genuine existing packs displayed in desktop/mobile Chrome. No new Kane dashboard verification is claimed. |
+| SeatPilot adapter | Exact ZIP recognized, local API and independent invariant covered by offline tests; no live Kane battle on SeatPilot is claimed yet. |
 
 Passing the checkout test does not prove full-app correctness, security or
 production readiness. The supported fault space and independent probes are

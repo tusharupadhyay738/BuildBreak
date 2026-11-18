@@ -1,0 +1,74 @@
+[
+  {
+    "id": "evt-nocturne-symphony",
+    "title": "Nocturne Symphony: Glass & Strings",
+    "category": "Chamber & Electronic",
+    "dateLabel": "Fri, Dec 11, 2026",
+    "timeLabel": "8:00 PM CST",
+    "doorsOpenLabel": "Doors open at 7:15 PM",
+    "durationLabel": "90 min, no intermission",
+    "venue": "Meridian Concert Hall",
+    "city": "Chicago, IL",
+    "unitPrice": 68.0,
+    "currency": "USD",
+    "availableSeats": 42,
+    "totalSeats": 120,
+    "maxPerBooking": 8,
+    "imageUrl": "/src/assets/images/event_nocturne_strings_1794927064578.jpg",
+    "imageAlt": "String quartet and analog synthesizer performing under warm amber stage lights",
+    "description": "An intimate candlelit performance pairing acoustic string quartet repertoire with live modular analog synthesis.",
+    "highlights": [
+      "Reserved acoustically balanced hall seating",
+      "90-minute uninterrupted concert program",
+      "Doors and acoustic listening lounge open at 7:15 PM"
+    ]
+  },
+  {
+    "id": "evt-solstice-film",
+    "title": "Solstice Film & Sound Retrospective",
+    "category": "35mm Cinema & Live Score",
+    "dateLabel": "Sat, Dec 19, 2026",
+    "timeLabel": "7:30 PM PST",
+    "doorsOpenLabel": "Doors open at 6:45 PM",
+    "durationLabel": "110 min + Q&A",
+    "venue": "The Astor Conservatory",
+    "city": "Seattle, WA",
+    "unitPrice": 44.0,
+    "currency": "USD",
+    "availableSeats": 28,
+    "totalSeats": 96,
+    "maxPerBooking": 8,
+    "imageUrl": "/src/assets/images/event_solstice_cinema_1794927063910.jpg",
+    "imageAlt": "Restored historic theater interior with 35mm projector beam illuminated toward stage",
+    "description": "Archival 35mm short films projected in full conservatory fidelity with an original live score for cello and percussion.",
+    "highlights": [
+      "Dual-projector 35mm archival print presentation",
+      "Live electro-acoustic accompaniment on stage",
+      "Illustrated program booklet included with ticket"
+    ]
+  },
+  {
+    "id": "evt-kinetica-forum",
+    "title": "Kinetica Architecture & Light Forum",
+    "category": "Design Forum & Exhibition",
+    "dateLabel": "Thu, Jan 14, 2027",
+    "timeLabel": "6:30 PM EST",
+    "doorsOpenLabel": "Doors open at 5:45 PM",
+    "durationLabel": "2 hrs twilight access",
+    "venue": "Foundry Civic Pavilion",
+    "city": "Boston, MA",
+    "unitPrice": 95.0,
+    "currency": "USD",
+    "availableSeats": 19,
+    "totalSeats": 80,
+    "maxPerBooking": 6,
+    "imageUrl": "/src/assets/images/event_kinetica_pavilion_1794927064811.jpg",
+    "imageAlt": "Concrete and glass exhibition pavilion illuminated at twilight with geometric light sculptures",
+    "description": "Twilight keynote talks by spatial architects and acoustic sculptors, followed by after-hours access to the light pavilion.",
+    "highlights": [
+      "Main pavilion keynote & moderated Q&A",
+      "Private twilight walkthrough of six kinetic light works",
+      "Complimentary espresso and winter tea reception"
+    ]
+  }
+]

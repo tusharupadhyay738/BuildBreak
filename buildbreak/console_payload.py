@@ -86,16 +86,20 @@ def console_payload(sessions, artifacts, selected, format_time):
                  note=runs.get('after', {}).get('result', 'Not recorded'),
                  traceSnippet=runs.get('after', {}).get('evidence_id') or 'Not recorded'),
         ]
-        checks = [dict(id=phase, command='kane-cli testmd run .testmuai/tests/CheckoutConsistency_test.md',
+        seatpilot = session['mode'].startswith('SeatPilot / ')
+        target_app = 'SeatPilot' if seatpilot else 'BreakShop'
+        test_name = 'SeatPilotBooking_test.md' if seatpilot else 'CheckoutConsistency_test.md'
+        checks = [dict(id=phase, command='kane-cli testmd run .testmuai/tests/' + test_name,
                        result=run['result'], detail='Execution: ' + (run['evidence_id'] or 'Not recorded') +
                        '; protected test SHA-256: ' + run['test_hash']) for phase, run in runs.items()]
         battles.append(dict(
-            id=session['id'], isSample=False, title=outcome + ' · BreakShop', targetApp='BreakShop',
+            id=session['id'], isSample=False, title=outcome + ' · ' + target_app, targetApp=target_app,
             recordedLabel=format_time(session['created']), breaker=detail.get('producer_label') or session['mode'],
             faultFamily=detail.get('family') or 'Not recorded', outcome=outcome, outcomeTone=tone,
             repairAttempts=session['attempts'], maxAttempts=detail.get('max_attempts') or 3,
             summary=session['mode'] + ' · ' + (detail.get('source') or 'Source not recorded') +
-                    '. Results cover the frozen checkout flow only; screenshots are viewports, not assertions. '
+                    ('. Results cover the frozen booking flow only; screenshots are viewports, not assertions. ' if seatpilot
+                     else '. Results cover the frozen checkout flow only; screenshots are viewports, not assertions. ') +
                     'Missing values are not inferred. Repeated faults are not new discoveries.' +
                     (' Requirements-only experiment; excluded from normal drill scores.' if detail.get('experiment') else ''),
             stages=stages, comparisons=comparisons, screenshots=shots,
