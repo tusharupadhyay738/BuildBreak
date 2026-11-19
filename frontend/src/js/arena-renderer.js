@@ -237,6 +237,18 @@ function renderInfraErrorState(errorObj) {
   `;
 }
 
+function shareResult(battle) {
+  const phases = battle.verification?.checks || [];
+  const lines = [
+    `BuildBreak Arena | ${battle.targetApp} | ${battle.outcome}`,
+    `Battle ${battle.id}`,
+    `Breaker: ${battle.breaker}. Repair attempts: ${battle.repairAttempts}.`,
+    ...phases.map(check => `Kane ${check.id}: ${check.result}`),
+    battle.summary,
+  ];
+  return lines.join('\n');
+}
+
 function renderOverviewSection(
   battle,
   {
@@ -244,6 +256,7 @@ function renderOverviewSection(
     prevStageIndex = 0,
     isReplayingStages = false,
     animateBattleEnter = true,
+    recordedArchive = false,
   } = {},
 ) {
   const stages = Array.isArray(battle.stages) ? battle.stages : [];
@@ -291,6 +304,9 @@ function renderOverviewSection(
             ${renderStatusIcon(battle.outcomeTone)}
             <span>Outcome: ${escapeHtml(battle.outcome)}</span>
           </div>
+          ${recordedArchive && battle.isSample === false && battle.verification?.checks?.length
+            ? `<button type="button" data-copy-label="Battle summary copied" data-copy-text="${escapeHtml(shareResult(battle))}" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Copy battle summary</button>`
+            : ''}
           <div class="text-xs text-slate-500 font-mono tabular-nums">
             Attempts: ${escapeHtml(battle.repairAttempts)} / ${escapeHtml(battle.maxAttempts)}
             <span aria-hidden="true">&middot;</span>
@@ -1047,11 +1063,12 @@ export function renderBattleFilterBar({ payload, outcomeFilter, counts, filtered
 function renderProjectSetup() {
   return `<section id="project-setup-panel" class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
     <h2 class="font-display text-lg font-semibold text-slate-900">Start a full battle</h2>
-    <p class="text-sm text-slate-600">Import source ZIP, check compatibility, approve the tests, then run. BreakShop and the recognized SeatPilot export have validated adapters. Other React projects need their own adapter before execution. SeatPilot uses a real Flask booking API; fixture fallback is disabled.</p>
+    <p class="text-sm text-slate-600">Choose a demo to see what Kane will check, or import a supported source ZIP.</p>
     <div class="flex flex-wrap items-center gap-3">
+      <button id="project-seatpilot" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Try SeatPilot ticket booking</button>
+      <button id="project-builtin" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Use built-in BreakShop</button>
       <input id="project-zip" type="file" accept=".zip,application/zip" aria-label="Project source ZIP" class="text-sm text-slate-700">
       <button id="project-import" type="button" class="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Import ZIP</button>
-      <button id="project-builtin" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Use built-in BreakShop</button>
     </div>
     <p id="project-status" role="status" class="text-sm text-slate-600">Checking local setup...</p>
     <p id="project-prerequisites" class="text-xs text-slate-500"></p>
@@ -1065,6 +1082,7 @@ function renderProjectSetup() {
       <label class="inline-flex items-center gap-2"><input id="project-approve" type="checkbox">I reviewed and approve this test for an isolated demo with fictional data.</label>
       <button id="project-start" type="button" disabled class="rounded bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Start full battle</button>
     </div>
+    <p id="project-next" aria-live="polite" class="text-sm text-slate-600"></p>
     <p class="text-xs text-slate-500">Baseline → Gemini/controlled fault → Arena validation → Kane → Codex (up to 3 attempts) → Kane. Imported code never runs before approval. Source exports, keys and evidence stay local. CLI authentication and credit availability are checked during execution.</p>
   </section>`;
 }
@@ -1181,6 +1199,7 @@ export function renderArenaDashboard(state) {
 
   parts.push(
     renderOverviewSection(activeBattle, {
+      recordedArchive: activePreviewKey === 'archive' && payload.mode === 'live_archive' && payload.isSample === false,
       selectedStageIndex,
       prevStageIndex,
       isReplayingStages,

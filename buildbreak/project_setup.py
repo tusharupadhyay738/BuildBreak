@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import threading
 import time
+import uuid
 import zipfile
 
 from . import kane_live
@@ -154,6 +155,9 @@ def register_project_routes(app, require_local_viewer):
         if project_id == 'builtin':
             record = dict(id='builtin', framework='Flask', adapter='breakshop', compatible=True,
                           reason='Built-in BreakShop demo with a validated adapter.')
+        elif project_id == 'seatpilot':
+            record = dict(id='seatpilot', framework='SeatPilot', adapter='seatpilot', compatible=True,
+                          reason='Book two concert tickets, apply EARLY15 and reload the saved confirmation.')
         else:
             _, record = load_project(app.config['ARENA_PROJECTS'], project_id)
         test_path = (Path('.testmuai/tests/SeatPilotBooking_test.md') if record.get('adapter')=='seatpilot'
@@ -212,10 +216,12 @@ def register_project_routes(app, require_local_viewer):
             if kane_live.get_active_session() and kane_live.get_active_session().status == 'running':
                 raise ValueError('A run is already active.')
             source = ROOT
-            if project_id != 'builtin':
+            if project_id == 'seatpilot':
+                # The runner populates a fresh directory from the bundled, reviewed source.
+                source = Path(app.config['ARENA_PROJECTS']) / 'seatpilot' / uuid.uuid4().hex
+            elif project_id != 'builtin':
                 folder, record = load_project(app.config['ARENA_PROJECTS'], project_id)
                 # Make a separate canonical runner snapshot for each launch.
-                import uuid
                 source = folder / ('prepared-' + uuid.uuid4().hex)
                 prepare_source(folder, record, source)
             session = start_battle(source, Path(app.config['ARENA_DATABASE']),

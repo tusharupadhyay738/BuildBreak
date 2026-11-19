@@ -135,6 +135,21 @@ class ProjectSetupTests(unittest.TestCase):
         info = self.client.get('/api/projects/builtin/preflight').json
         return dict(approved=True, test_sha256=info['test_sha256'], breaker='scripted', show_browser=False)
 
+    def test_bundled_seatpilot_requires_its_own_approval_and_launches_in_private_directory(self):
+        url = '/api/projects/seatpilot'
+        with patch('buildbreak.project_setup.shutil.which', return_value='installed'), \
+             patch('buildbreak.project_setup.start_battle', return_value=SimpleNamespace(status='running')) as start:
+            info = self.client.get(url + '/preflight').json
+            self.assertEqual(info['project']['adapter'], 'seatpilot')
+            self.assertIn('EARLY15', info['test_text'])
+            data = self.launch_data()
+            self.assertEqual(self.client.post(url + '/battle', json=data, headers=self.headers).status_code, 400)
+            start.assert_not_called()
+            data['test_sha256'] = info['test_sha256']
+            self.assertEqual(self.client.post(url + '/battle', json=data, headers=self.headers).status_code, 200)
+            self.assertEqual(start.call_args.kwargs['adapter_name'], 'seatpilot')
+            self.assertEqual(start.call_args.args[0].parent, self.storage / 'seatpilot')
+
     def test_approval_local_guard_and_setup_are_required_before_launch(self):
         data = self.launch_data()
         with patch('buildbreak.project_setup.start_battle') as start:

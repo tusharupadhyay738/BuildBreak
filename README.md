@@ -200,7 +200,7 @@ for session continuity if needed. Flask's development server is for this local d
 
 ## Launch through the dashboard
 
-Open `/arena`, choose **Use built-in BreakShop** or **Import ZIP**, read the
+Open `/arena`, choose **Try SeatPilot ticket booking**, **Use built-in BreakShop** or **Import ZIP**, read the
 compatibility/setup report, review the acceptance test and check its approval
 box. Then choose Gemini or the labeled scripted demo and click **Start full
 battle**. The same protected runner drives fault injection, validation, Kane,

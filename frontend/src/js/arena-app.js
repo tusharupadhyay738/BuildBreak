@@ -353,10 +353,10 @@ export function initArenaDashboard() {
           .writeText(text)
           .then(() => {
             sound.play('copy');
-            showToast(`Copied "${text}"`);
+            showToast(copyBtn.dataset.copyLabel || `Copied "${text}"`);
           })
           .catch(() => showToast('Copy unavailable in this browser context'));
-      }
+      } else if (text) showToast('Copy unavailable in this browser context');
       return;
     }
 
@@ -836,6 +836,7 @@ export function initArenaDashboard() {
 
   let projectInfo = null;
   let selectedProject = 'builtin';
+  let selectionVersion = 0;
   let projectLaunching = false;
   function projectText(id, text) {
     const node = document.getElementById(id);
@@ -846,11 +847,22 @@ export function initArenaDashboard() {
     if (!button) return;
     const mode = document.getElementById('project-breaker')?.value || 'gemini';
     const requirements = projectInfo?.prerequisites;
-    button.disabled = projectLaunching || projectRunActive || !projectInfo?.project?.compatible || !projectInfo?.enabled ||
-      !document.getElementById('project-approve')?.checked ||
-      !requirements?.kane || !requirements?.codex || !requirements?.chrome || requirements?.node === false || (mode === 'gemini' && !requirements?.gemini);
+    let next = '';
+    if (projectLaunching || projectRunActive) next = 'Follow the current battle in the live panel below.';
+    else if (!projectInfo) next = 'Select a project and wait for its setup check.';
+    else if (!projectInfo.project.compatible) next = 'Choose a bundled demo to run a battle.';
+    else if (!projectInfo.enabled) next = 'Enable local execution and restart Arena.';
+    else if (!requirements.chrome || !requirements.kane || !requirements.codex || requirements.node === false)
+      next = 'Install the tools marked missing above, then refresh this page.';
+    else if (mode === 'gemini' && !requirements.gemini)
+      next = 'For Gemini, restart Arena from your configured terminal. To try a prepared fault now, choose Scripted.';
+    else if (!document.getElementById('project-approve')?.checked)
+      next = 'Read the acceptance test above and tick the approval box to enable Start.';
+    button.disabled = Boolean(next);
+    projectText('project-next', next || 'Ready. Start the battle to watch Kane check the healthy app.');
   }
   async function loadProject(id) {
+    const version = ++selectionVersion;
     projectInfo = null;
     const approval = document.getElementById('project-approve');
     if (approval) approval.checked = false;
@@ -858,6 +870,7 @@ export function initArenaDashboard() {
     try {
       const response = await fetch(`/api/projects/${encodeURIComponent(id)}/preflight`, {cache:'no-store'});
       const data = await response.json();
+      if (version !== selectionVersion) return;
       if (!response.ok) throw new Error(data.error || 'Preflight failed.');
       projectInfo = data;
       selectedProject = id;
@@ -867,7 +880,7 @@ export function initArenaDashboard() {
       const p = data.prerequisites;
       projectText('project-prerequisites', `Local execution: ${data.enabled ? 'enabled' : 'disabled - set ARENA_ENABLE_LIVE_KANE=1 and restart'} | Chrome: ${p.chrome ? 'found' : 'missing'} | Kane: ${p.kane ? 'found' : 'missing'} | Codex: ${p.codex ? 'found' : 'missing'} ${p.node === undefined ? '' : ` | SeatPilot Node/npm: ${p.node ? 'found' : 'missing'}`} | Gemini environment: ${p.gemini ? 'configured' : 'not configured in the Arena server - restart it from your configured terminal'}`);
     } catch (error) {
-      projectText('project-status', error.message);
+      if (version === selectionVersion) projectText('project-status', error.message);
     }
     updateProjectStart();
   }
@@ -878,14 +891,15 @@ export function initArenaDashboard() {
     projectInfo = null;
     updateProjectStart();
     projectText('project-status','Importing source only; no project code or install scripts are being run...');
+    const version = ++selectionVersion;
     const form = new FormData();
     form.append('project',file);
     try {
       const response = await fetch('/api/projects/import',{method:'POST',headers:{'X-Arena-Request':'1'},body:form});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Import failed.');
-      await loadProject(data.project.id);
-    } catch (error) { projectText('project-status',error.message); }
+      if (version === selectionVersion) await loadProject(data.project.id);
+    } catch (error) { if (version === selectionVersion) projectText('project-status',error.message); }
   }
   async function launchProject() {
     if (!projectInfo || projectLaunching) return;
@@ -912,6 +926,7 @@ export function initArenaDashboard() {
   document.addEventListener('click',(event)=>{
     if (event.target.closest('#project-import')) importProject();
     else if (event.target.closest('#project-builtin')) loadProject('builtin');
+    else if (event.target.closest('#project-seatpilot')) loadProject('seatpilot');
     else if (event.target.closest('#project-start')) launchProject();
   });
   document.addEventListener('change',(event)=>{
