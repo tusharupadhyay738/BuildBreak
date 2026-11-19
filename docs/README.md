@@ -10,6 +10,10 @@ evidence accounts describe what actually ran, including failures and limits.
 | Configure the default Gemini Breaker or replay a cache | [Gemini and cache setup](guides/gemini-breaker.md) |
 | See a genuine generated fault and repair | [First Gemini drill](evidence/gemini-first-battle.md) |
 | Inspect the live run using Gemini by default | [November 17 default-mode drill](evidence/gemini-default-battle.md) |
+| Inspect the latest documented Gemini pricing repair | [November 18 generated fault](evidence/gemini-pricing-battle-2026-11-18.md) |
+| Launch from the dashboard or try SeatPilot | [Project setup and supported imports](guides/self-service.md) |
+| See a full dashboard-launched run | [BreakShop import and repair](evidence/dashboard-project-battle.md) |
+| Watch the Chrome window inside Arena | [Local viewport setup](guides/live-kane-monitor.md) |
 | Inspect the successful cached replay | [Cached replay](evidence/cached-replay.md) |
 | Read a result without running agents | [Clearly labeled sample report](evidence/sample-report.md) |
 | Understand screenshot provenance | [Recorded screenshots](guides/evidence-screenshots.md) |

@@ -34,7 +34,7 @@ remaining credits or API availability. Execution reports actual failures.
 ## Judge flow
 
 1. Open `/arena` locally. The setup controls work even with empty battle history.
-2. Choose the built-in BreakShop demo, or upload a source ZIP (maximum 20 MB,
+2. Choose **Use built-in BreakShop** or **Try SeatPilot ticket booking**, or upload a source ZIP (maximum 20 MB,
    expanded maximum 80 MB; exclude dependencies and build artifacts). The exact
    SeatPilot AI Studio export in this repository is recognized by a reviewed
    source manifest. Its ZIP can include the ordinary source files; `.env.example`

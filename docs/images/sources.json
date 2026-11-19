@@ -1,17 +1,35 @@
 {
-  "capture_date": "2026-11-15",
-  "battle": "20261115T051420-5ba874b2",
-  "context": "Existing genuine cached replay; no new battle or Kane dashboard test was run.",
   "images": [
     {
       "file": "arena-dashboard.png",
-      "sha256": "4ec2693f1aa2d805d1b19097a50af90ccda6a193203dfeb603b64b73104a79b7",
-      "kind": "current dashboard capture of genuine recorded history"
+      "sha256": "50178cde8cfc12a98d880ff1227704d35389bb09f6d31a300520d8d62fa4745f",
+      "kind": "Chrome capture of the current local project setup and genuine history.",
+      "capture_date": "2026-11-19",
+      "source_commit": "a65b7ca",
+      "battle": "20261118T090037-f46311d1"
     },
     {
-      "file": "arena-evidence.png",
-      "sha256": "07218e07f09c9fe472cb0abac6ae659ed78a2516c1e4e6f467a98389ce078c20",
-      "kind": "current dashboard capture of genuine recorded history"
+      "file": "arena-timeline.png",
+      "sha256": "0c815504d0d5da13b352e1f5ddf362286ab0157775d1225b5599479356d8dba9",
+      "kind": "Chrome section capture of the recorded workflow, final stage selected.",
+      "capture_date": "2026-11-19",
+      "source_commit": "a65b7ca",
+      "battle": "20261118T090037-f46311d1"
+    },
+    {
+      "file": "arena-comparison.png",
+      "sha256": "f8d6deaec5bc5806611d209f25be09f1df6991abdfffd5c96ae26cf50fc6c3f6",
+      "kind": "Chrome section capture of the observed pricing values.",
+      "capture_date": "2026-11-19",
+      "source_commit": "a65b7ca",
+      "battle": "20261118T090037-f46311d1"
+    },
+    {
+      "file": "seatpilot-booking.png",
+      "sha256": "d6374def87c71de49a9dde6aaa42a4300806235dd398b42ac0eadfc0a7fce87d",
+      "kind": "Chrome capture of the bundled SeatPilot site served by the local adapter with a fresh database.",
+      "capture_date": "2026-11-19",
+      "source_commit": "a65b7ca"
     },
     {
       "file": "arena-banner.svg",
@@ -25,7 +43,8 @@
       "execution": "3bb786e9-4dce-4cfe-a473-603b6502714d",
       "source_pack_sha256": "335dd266e606866a1ad0aa0ef49d4bcddd31cd90febc669f0a34c07021cc42ae",
       "test_sha256": "cba82a4a759f3bca8a2e79196d39107b061a87aed89465b4c9cae16dbe4521f7",
-      "captured_action": 29
+      "captured_action": 29,
+      "battle": "20261115T051420-5ba874b2"
     },
     {
       "file": "kane-repaired.jpg",
@@ -34,7 +53,8 @@
       "execution": "a60b4704-7ca6-445e-9b4f-a2b92d0af544",
       "source_pack_sha256": "0c2ce9fcd5b6f61a18034334c12d2aa21db0a569b0d5191095878ced01d84d0b",
       "test_sha256": "cba82a4a759f3bca8a2e79196d39107b061a87aed89465b4c9cae16dbe4521f7",
-      "captured_action": 50
+      "captured_action": 50,
+      "battle": "20261115T051420-5ba874b2"
     }
   ]
 }

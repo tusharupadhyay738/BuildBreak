@@ -37,15 +37,19 @@ in `docs/images` was explicitly selected and visually reviewed.
 
 ## Included public images
 
-`arena-dashboard.png` and `arena-evidence.png` are actual Chrome captures of
-the current dashboard displaying genuine recorded history. The capture used a
-private SQLite backup, without creating or changing any historical result.
-No synthetic test fixtures were inserted into that history.
+The November 19 Chrome captures show the interface at commit `a65b7ca`. The
+dashboard read a temporary backup of genuine local history. The pricing battle
+was already complete when the views were captured. [November 18 run account](../evidence/gemini-pricing-battle-2026-11-18.md).
 
-The shown battle is cached replay `20261115T051420-5ba874b2`, documented in
-[the replay account](../evidence/cached-replay.md). It reused an earlier Gemini-generated
-fault, with no Gemini API call during replay. The screenshots do not represent
-a new battle or a new Kane verification of the updated dashboard.
+| Public image | What it shows |
+| --- | --- |
+| [Arena dashboard](../images/arena-dashboard.png) | Local project selection, prerequisites and approval with execution disabled for this capture. |
+| [Workflow timeline](../images/arena-timeline.png) | The final recorded stage of BreakShop battle `20261118T090037-f46311d1`. |
+| [Expected and actual](../images/arena-comparison.png) | The same battle's observed $5.40 discount and its verified $4.50 value after repair. |
+| [SeatPilot](../images/seatpilot-booking.png) | The booking home page rendered by the bundled adapter against a fresh local database. This capture shows the interface only. |
+
+The two older Kane frames below are historical records of a different battle,
+cached replay `20261115T051420-5ba874b2`. They remain attached to [that replay's account](../evidence/cached-replay.md).
 
 | Original Kane frame | Execution | Captured action |
 | --- | --- | --- |

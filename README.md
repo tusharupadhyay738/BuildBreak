@@ -2,173 +2,37 @@ Gemini proposes a bug, Arena validates it, Kane CLI judges it, Codex repairs it.
 
 # BuildBreak Arena
 
-![BuildBreak Arena — challenge the test, repair the app, inspect the proof](docs/images/arena-banner.svg)
+![BuildBreak Arena. Gemini challenges the app, Codex repairs it and Kane verifies the result.](docs/images/arena-banner.svg)
 
-<p align="center">
-  <strong>Can your test catch the bug? Can your agent repair it? Show the evidence.</strong><br>
-  Gemini is the default Breaker. Cached and scripted fault selection remain available.
-</p>
+[Try Arena locally](#quickstart) · [Inspect a recorded repair](#see-the-evidence) · [Launch a battle](#launch-through-the-dashboard) · [Explore the code](#repository-map)
 
-<p align="center">
-  <a href="#quickstart">Quickstart</a> ·
-  <a href="#the-repair-loop">The loop</a> ·
-  <a href="#repository-map">Code map</a> ·
-  <a href="#see-the-evidence">Screenshots</a> ·
-  <a href="#what-is-proven">Proof and limits</a> ·
-  <a href="#project-guide">Guides</a>
-</p>
+## Why we built it
 
-## What is it?
+A checkout can look fine and still charge the wrong amount. When we built BreakShop, we wanted to answer two questions before shipping. Would our browser test notice a wrong discount? If it did, could a coding agent use that failure to repair the app and pass the **same test**?
 
-**BuildBreak Arena checks whether a browser acceptance test catches a deliberate
-logic bug, then whether a coding agent can repair it while that test stays unchanged.**
-
-Arena creates a separate copy of the demo app, coordinates the Breaker and Builder,
-asks Kane to verify the browser behavior, and records what actually happened.
-If the test misses a proven defect, Arena records an escape. If repair does not
-succeed within the attempt limit, it requests human review.
-
-**Arena is the tool. BreakShop and the recognized SeatPilot AI Studio export
-have explicit local demo adapters.** This does not make Arena a runner for
-arbitrary websites or a production incident predictor.
-
-## Repository map
-
-```text
-BuildBreak/
-├── app.py                 # Start BreakShop and the Arena dashboard
-├── battle_runner.py       # Start a battle with the familiar CLI
-├── arena.py               # Small compatibility import for the frozen app source
-├── requirements.txt
-├── README.md
-├── buildbreak/            # Implementation: runner, agents, validation and dashboard
-├── tests/                 # Offline unit and integration tests
-├── templates/             # Flask pages
-├── static/                # Shop and dashboard styles
-├── docs/
-│   ├── guides/            # Setup, commands and safeguards
-│   ├── evidence/          # Genuine run accounts and the labeled sample report
-│   ├── demo/              # Presentation guide
-│   ├── specs/             # BreakShop requirements
-│   └── images/            # Reviewed screenshots and provenance
-└── .testmuai/tests/        # Kane acceptance definitions; protected test stays here
-```
-
-[Implementation map](buildbreak/README.md) · [Test guide](tests/README.md) ·
-[Documentation home](docs/README.md)
-
-The root launchers stay small. The `arena.py` adapter preserves the hash-bound
-BreakShop source and saved-cache compatibility; its implementation lives in
-`buildbreak/arena.py`. Private local artifacts remain in ignored `instance/`.
-
-![Actual Arena dashboard showing genuine recorded battles, including a cached Gemini replay](docs/images/arena-dashboard.png)
-
-*Actual dashboard, captured with genuine local history. Counts describe eligible
-recorded executions, not website-wide quality or a statistical repair rate.*
-
-## The repair loop
-
-```mermaid
-flowchart TD
-    A[Healthy BreakShop] --> B[Isolated copy and fresh database]
-    B --> C[Healthy baseline must pass Kane]
-    C --> D[Gemini or cached validated fault / controlled library fault]
-    D --> E[Kane runs the unchanged acceptance test]
-    E -->|Confirmed app failure| F[Evidence goes to a fresh Codex Builder]
-    F --> G[Proposed repair passes code guards and automated checks]
-    G --> H[Kane verifies the repair]
-    H -->|Pass| I[Recorded repair and evidence]
-    G -->|Checks fail| J{Attempts remain?}
-    H -->|Confirmed failure| J
-    J -->|Yes, maximum three| F
-    J -->|No| K[Human review]
-    E -->|Pass despite a directly proven fault| L[Escape: gap in selected checks]
-    I --> M[Arena dashboard]
-    K --> M
-    L --> M
-```
-
-Baseline, authentication, browser and infrastructure problems stop verification
-without being counted as caught application defects. Kane's final events,
-process result and sealed evidence must agree before a browser verdict is accepted.
-
-| Component | Its job |
-| --- | --- |
-| **Breaker** | Gemini proposes a bounded JSON patch, a validated cache replays one, or the controlled mode supplies a prepared fault. |
-| **Codex Builder** | Receives broken source and genuine failure feedback in a fresh context; proposes a repair. |
-| **Kane referee** | Uses the running app in a real browser, checks the frozen acceptance flow and records evidence. |
-| **Arena runner** | Isolates the app, protects test hashes, checks candidate code, coordinates the loop and stores results. |
-
-The Builder is not supplied the fault patch, its description, healthy source or
-Git history. Generated repairs undergo syntax, route and sensitive-operation
-checks before execution. Validated Gemini/cache repairs must also restore their
-selected independent invariant. These guards are not an OS sandbox.
-
-## Watch Kane live inside Arena
-
-The optional local Kane panel now displays the actual viewport of the isolated
-Chrome browser that Kane controls, alongside live numbered test steps. It uses a
-fresh browser profile and a local image feed; it does not capture your desktop or
-normal Chrome profile. The viewport is read-only. You can run a standalone checkout check or launch a
-full supported battle through the separate project setup controls.
-
-The feed refreshes roughly up to twice per second. It is labeled **LIVE** during
-the run and switches to **RECORDED - verified evidence** after the final pack
-checks. Live images are observation, not proof of a passing test. No sample frame
-or simulated pass is substituted when capture or verification fails.
-
-See [setup, limits and implementation](docs/guides/live-kane-monitor.md).
+Arena lets a developer rehearse that incident on a disposable copy. Give it a supported app and an acceptance test you trust. Arena checks the healthy flow, puts one measurable bug in the copy and follows it through detection and repair. You get a record of what the browser saw, how many repair attempts the Builder needed and which checks passed afterward. A proven bug that slips through the browser test is recorded as an **escape**.
 
 ## See the evidence
 
-![Genuine Kane failure and repair images in Arena, with recorded amounts and execution references](docs/images/arena-evidence.png)
+In one BreakShop run, the cart subtotal was **$44.97**. The discount should have been **$4.50**. After Gemini's change, Kane read **$5.40** in the browser. A fresh Codex session repaired the app on its first attempt. Kane then read **$4.50** and a **$40.47** total using the original test. The broken run stopped before it recorded a final total. [Read the November 18 run account](docs/evidence/gemini-pricing-battle-2026-11-18.md).
 
-**The dashboard now shows the captured failure viewport and the latest repair
-viewport, with full-image links and their execution references.** Images appear
-after verification finishes and the archived pack matches the recorded hash,
-execution and test definition. Recognized currency observations are shown
-separately; screenshots do not substitute for assertions.
+![Arena's comparison table for the recorded BreakShop battle. The discount moves from $5.40 before repair to the expected $4.50 after repair.](docs/images/arena-comparison.png)
 
-The view above belongs to the real cached replay
-`20261115T051420-5ba874b2`. It replayed an earlier Gemini-generated fault without
-a Gemini API call during replay. Kane and Codex still used their services.
+### The repair loop
 
-| What was measured | Recorded result |
+![The five stages of the recorded BreakShop run, ending with Kane verifying the repair.](docs/images/arena-timeline.png)
+
+| When you run a battle | What happens |
 | --- | --- |
-| Required subtotal / discount / total | **$44.97 / $4.50 / $40.47** |
-| Kane's faulted cart observation | **$6.75 discount**; failed before checkout |
-| Separate direct database check | **$38.22 saved total** on the faulted fixture |
-| After Codex repair | **$40.47 saved total**; Kane checkout and confirmation reload passed |
-
-The failure screenshot shows the top of the shop; its wrong discount was recorded
-outside the visible viewport. We keep that distinction explicit. These are
-historical results, not a new live run of the screenshot feature.
-
-<details>
-<summary>Open the original selected Kane frames</summary>
-
-| Failure checkpoint | Repaired confirmation |
-| --- | --- |
-| ![Original captured failure viewport from Kane](docs/images/kane-failure.jpg) | ![Original confirmation viewport after the verified repair](docs/images/kane-repaired.jpg) |
-
-Failure execution: `3bb786e9-4dce-4cfe-a473-603b6502714d`.<br>
-Repair execution: `a60b4704-7ca6-445e-9b4f-a2b92d0af544`.
-
-The two JPEGs are unchanged copies of selected frames. See
-[screenshot provenance and privacy](docs/guides/evidence-screenshots.md) and
-[the verified replay account](docs/evidence/cached-replay.md).
-
-</details>
-
-Raw packs, logs, cookies, credentials, databases and caches stay out of Git.
-Only the reviewed demo images are included here. Archived previews are recorded screenshots. A separate, clearly labeled local
-Chrome viewport feed is available during dashboard-launched runs.
+| **You approve the check** | Arena shows the acceptance test, protects its hash and runs the healthy baseline on an isolated copy with its own database. |
+| **The Breaker proposes a fault** | Gemini proposes a bounded code edit. Arena validates the edit and checks its effect independently, for example by reading a saved order. |
+| **Kane exercises the broken app** | Kane uses Chrome to run the approved test. A confirmed application failure sends evidence to the Builder. A pass despite a directly verified fault records an escape. |
+| **Codex repairs from evidence** | A fresh Builder receives the broken source, written requirements and failure feedback. Arena checks the proposed repair and reruns the relevant automated checks. |
+| **Kane verifies again** | The same browser test decides whether the exercised flow passes after repair. After three unsuccessful repair attempts, the battle goes to human review. Browser or infrastructure issues are tracked separately. |
 
 ## Quickstart
 
-**Try the app first — no API key or agent login needed.** From a downloaded or
-cloned repository folder, create the environment and install the dependencies.
-This is an app-only five-minute quickstart; download times vary.
+**Browse the shop and console locally without an account.** From a clone of this repository, run the commands for your platform.
 
 **Windows PowerShell**
 
@@ -178,7 +42,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe app.py
 ```
 
-**macOS / Linux**
+**macOS or Linux**
 
 ```sh
 python3 -m venv .venv
@@ -186,138 +50,64 @@ python3 -m venv .venv
 .venv/bin/python app.py
 ```
 
-Open [BreakShop](http://127.0.0.1:5000) and [Arena](http://127.0.0.1:5000/arena).
-Try two shirts and one sticker pack with SAVE10. Use fictional checkout details;
-no payment is taken. Stop the server with **Ctrl+C**. Activation is unnecessary.
-
-**A fresh Arena starts empty.** The images above are historical examples, not
-preloaded results. Read the [SAMPLE report](docs/evidence/sample-report.md) without
-creating fake history. A real battle records its own results automatically.
-
-Orders persist in ignored `instance/shop.sqlite3`. A random development session
-secret is created on startup. Set a private `SECRET_KEY` environment variable
-for session continuity if needed. Flask's development server is for this local demo.
+Open the [Arena dashboard](http://127.0.0.1:5000/arena) or try two shirts, one sticker pack and SAVE10 in [BreakShop](http://127.0.0.1:5000). Use fictional checkout details. A fresh clone starts with empty battle history. To see an example before running agents, open the [recorded battle](docs/evidence/dashboard-project-battle.md) or the [labeled sample report](docs/evidence/sample-report.md).
 
 ## Launch through the dashboard
 
-Open `/arena`, choose **Try SeatPilot ticket booking**, **Use built-in BreakShop** or **Import ZIP**, read the
-compatibility/setup report, review the acceptance test and check its approval
-box. Then choose Gemini or the labeled scripted demo and click **Start full
-battle**. The same protected runner drives fault injection, validation, Kane,
-Codex repair and Kane re-verification, with live viewport updates in each phase.
+![Current Arena console showing the two demos, source ZIP import, local prerequisite checks and the test approval control.](docs/images/arena-dashboard.png)
 
-**Current import limit:** Arena executes the built-in BreakShop app and the exact
-recognized SeatPilot source export. The SeatPilot adapter keeps its visual design,
-uses a real local Flask API and disables demo-fixture fallback. It does not run
-arbitrary React projects or the uploaded ZIP's package scripts. A live Kane battle
-on SeatPilot has not yet been recorded. [Judge workflow and setup](docs/guides/self-service.md).
+1. **Enable local execution.** Install Chrome and authenticate the Kane and Codex CLIs. For Gemini, configure its free-tier model and key in the shell that starts Arena. Stop the preview server first. In PowerShell set `$env:ARENA_ENABLE_LIVE_KANE = "1"`, then run the same app launch command. On macOS or Linux run `ARENA_ENABLE_LIVE_KANE=1 .venv/bin/python app.py`. [Setup guide](docs/guides/self-service.md) · [Gemini configuration](docs/guides/gemini-breaker.md).
+2. **Choose a project.** Select **Use built-in BreakShop**, **Try SeatPilot ticket booking**, or import a supported source ZIP. Review the preflight checks and the acceptance test, then approve the test.
+3. **Start full battle.** Select Gemini or the scripted demo. Watch the progress and Kane's isolated Chrome viewport. The feed is read-only while Kane drives the browser. [Live monitor guide](docs/guides/live-kane-monitor.md).
+4. **Inspect the result.** Review expected and observed values, step through the timeline, open available verified screenshots and copy the battle summary. The live viewport shows activity. The verdict comes from the recorded verification. [Dashboard-launched BreakShop run](docs/evidence/dashboard-project-battle.md).
 
-## Run a real battle
+### Try the SeatPilot booking demo
 
-You need local Chrome and your own installed, authenticated **Kane CLI and Codex
-CLI**, with available account allowances. The app-only quickstart needs neither.
-See [runner prerequisites and troubleshooting](docs/guides/replayable-battles.md).
+![SeatPilot's event-booking home page served by its local Flask API, with three fictional cultural events and booking lookup.](docs/images/seatpilot-booking.png)
 
-Gemini is the default Breaker. With its free-tier configuration set, run:
+SeatPilot is a second application with a different question to test. When someone reserves tickets, do the saved booking and remaining inventory agree? The adapter pairs the AI Studio React design with a local Flask API and a separate protected booking test. It requires Node.js and npm to build the frontend. The image shows the running website. Live Kane repair evidence published here covers BreakShop. [Supported imports and adapter limits](docs/guides/self-service.md).
+
+## Run a real battle from the CLI
+
+The default command starts a Gemini battle with a fresh Codex Builder and up to three repair attempts.
 
 ```powershell
 .\.venv\Scripts\python.exe battle_runner.py --builder codex --max-attempts 3
 ```
 
-```sh
-.venv/bin/python battle_runner.py --builder codex --max-attempts 3
-```
+On macOS or Linux use `.venv/bin/python battle_runner.py --builder codex --max-attempts 3`.
 
-Missing Gemini configuration stops the run before Kane uses credits; it never
-silently switches modes. After configured Gemini proposals fail validation or
-API requests fail, the existing bounded process can use an explicitly recorded,
-validated controlled fallback. The history identifies the actual producer.
-
-For fault selection without a Gemini API call, use a validated local cache with
-`--breaker cached --cached-fault <file>`, or the scripted demo below. A full battle
-still needs Kane and, with `--builder codex`, Codex access. The runner starts its
-own isolated app; your main shop is preserved.
-
-```powershell
-.\.venv\Scripts\python.exe battle_runner.py --breaker scripted --builder codex --max-attempts 3
-```
-
-```sh
-.venv/bin/python battle_runner.py --breaker scripted --builder codex --max-attempts 3
-```
-
-Keep the main app running in a separate terminal and open `/arena` to follow
-recorded progress. By default the dashboard is read-only. An optional local-only
-project setup controls can now launch a complete supported battle after explicit
-acceptance-test approval. The standalone checkout monitor remains available. See
-[self-service setup and current adapter limits](docs/guides/self-service.md) and
-[local Kane monitor](docs/guides/live-kane-monitor.md).
-
-| Mode | When to use it |
+| Breaker option | When to use it |
 | --- | --- |
-| `--breaker scripted` | Predictable prepared fault; demonstration fallback. |
-| `--breaker codex` | Codex chooses between two controlled faults. |
-| `--breaker gemini` (default) | Gemini proposes a small logic fault; Arena validates it before acceptance. Requires `GEMINI_API_KEY`. |
-| `--breaker cached --cached-fault <file>` | Revalidate and replay a local cached Gemini proposal without calling Gemini. |
+| `--breaker gemini` (default) | Generate a bounded logic fault. Requires an environment-only API key, an available free model and explicit free-tier confirmation. |
+| `--breaker scripted` | Use a prepared fault for a reproducible demo without a Gemini call. |
+| `--breaker cached --cached-fault <file>` | Revalidate a privately saved Gemini proposal and replay it without a new Gemini call. |
+| `--breaker codex` | Have Codex choose between two controlled faults. |
 
-Gemini requires an environment-only key, an available model and
-explicit confirmation of free-tier access with billing disabled. Arena cannot
-verify billing status. See [Gemini setup and cache commands](docs/guides/gemini-breaker.md).
-Cached replay still consumes Kane/Codex allowances and needs a private cache
-created locally; caches are not bundled in a clone.
+Missing Gemini configuration stops the run. If configured proposals fail validation or requests fail, the runner can use a validated controlled fallback and records the actual producer. **Offline fault selection** with scripted or cached mode still requires Kane access for browser verification and Codex access when using the Codex Builder. [Runner prerequisites](docs/guides/replayable-battles.md) · [Genuine cached replay](docs/evidence/cached-replay.md).
 
 ## What is proven?
 
-| Capability | Evidence and current limit |
+| Question | Evidence and scope |
 | --- | --- |
-| Generated pricing drill | [Real Gemini → Kane → Codex → Kane run](docs/evidence/gemini-first-battle.md), caught and repaired. |
-| Gemini default-mode drill | [November 17 live run](docs/evidence/gemini-default-battle.md): one rejection, second proposal accepted, repaired on attempt 1. Repeats the existing pricing case. |
-| Cached replay | [Real repeat execution](docs/evidence/cached-replay.md), repaired without a Gemini call during replay. Same fault, not another bug discovery. |
-| Quantity-boundary faults | Separate direct probe accepts 99, rejects 100 without cart changes, and removes at zero. Local/mocked tests pass; a live quantity battle is pending. |
-| Builder feedback comparison | [Requirements-only ablation option](docs/guides/builder-ablation.md), one attempt and excluded from scores. No live comparison yet. |
-| Requirements-to-test workflow | [Manual Kane feasibility gate](docs/evidence/kane-feasibility.md): partial exploration, approved requirements fallback, eight generated browser steps passed once. Not automatic onboarding. |
-| Screenshot dashboard | Genuine existing packs displayed in desktop/mobile Chrome. No new Kane dashboard verification is claimed. |
-| SeatPilot adapter | Exact ZIP recognized, local API and independent invariant covered by offline tests; no live Kane battle on SeatPilot is claimed yet. |
+| Did the loop catch and repair a generated bug? | The November 18 BreakShop run recorded a healthy pass, a failure on the broken copy and a pass after one Codex repair. [Run account](docs/evidence/gemini-pricing-battle-2026-11-18.md). |
+| Can a developer watch Kane use a site? | A standalone checkout verification showed changing Chrome frames inside Arena. A separate dashboard-launched BreakShop drill followed the baseline, failure and repair. [Viewport verification](docs/evidence/live-browser-view.md) · [Dashboard run](docs/evidence/dashboard-project-battle.md). |
+| Which projects can run? | BreakShop and the reviewed SeatPilot export have explicit adapters. Other uploads receive a compatibility inspection. An arbitrary public URL provides insufficient source to inject and repair a fault. |
+| How far does a pass generalize? | It covers the exercised flow. The dashboard summarizes eligible executions among the ten most recent records. Replaying a fault adds an execution. Broader coverage, a live SeatPilot repair and the effect of Kane feedback alone remain open questions. |
 
-Passing the checkout test does not prove full-app correctness, security or
-production readiness. The supported fault space and independent probes are
-explicit. The Builder also receives written expected amounts; we have not
-established how much Kane feedback improves repair success. Context separation
-and environment guards reduce accidental exposure; see the
-[local execution boundary](docs/guides/execution-boundary.md).
+The Builder gets written requirements as well as failure evidence. The original healthy source, hidden patch and Git history stay outside its repair context. Generated repairs undergo code and environment checks. Run the tool locally with fictional data. Raw evidence, cookies, databases and fault caches stay local. [Execution boundary](docs/guides/execution-boundary.md) · [Unscored Builder feedback comparison](docs/guides/builder-ablation.md) · [Screenshot provenance](docs/guides/evidence-screenshots.md).
 
-The dashboard summarizes eligible executions among the **10 most recent records**.
-Interrupted, unfinished, unvalidated and requirements-only experiment records are
-excluded from scores. A repeated cached patch counts as another execution, not
-broader coverage. Missing screenshots leave saved verdicts unchanged.
+## Repository map
 
-## Project guide
-
-| Start here | Read more |
+| Area | Where to look |
 | --- | --- |
-| Browse the organized documentation | [Documentation home](docs/README.md) |
-| Understand the runner | [Replayable battles](docs/guides/replayable-battles.md) |
-| Configure Gemini or build a cache | [Gemini Breaker](docs/guides/gemini-breaker.md) |
-| Inspect screenshot provenance | [Recorded screenshots](docs/guides/evidence-screenshots.md) |
-| Read a result without running agents | [SAMPLE report](docs/evidence/sample-report.md) |
-| Prepare the presentation | [Three-minute demo guide](docs/demo/demo-guide.md) |
-| Import the first human-triggered experiment | [Historical dashboard setup](docs/guides/historical-dashboard.md) |
-| Check the stronger test contract | [Checkout consistency](docs/evidence/checkout-consistency.md) |
+| App and CLI entry points | [app.py](app.py) · [battle_runner.py](battle_runner.py) |
+| Runner, agents and validators | [buildbreak/](buildbreak/) |
+| Dashboard design and Flask views | [frontend/](frontend/) · [templates/](templates/) |
+| Ticket booking adapter and demo | [examples/seatpilot/](examples/seatpilot/) |
+| Protected browser checks and offline tests | [.testmuai/tests/](.testmuai/tests/) · [tests/](tests/) |
+| Recorded results and demo walkthrough | [Evidence accounts](docs/evidence/) · [Three-minute demo guide](docs/demo/demo-guide.md) |
 
-Run the local unit suite:
+Run the offline suite with `.\.venv\Scripts\python.exe -m unittest discover -s tests -t .` on Windows, or `.venv/bin/python -m unittest discover -s tests -t .` on macOS or Linux. Mocked tests exercise runner behavior. Published live results link to separate run accounts.
 
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -v
-```
-
-```sh
-.venv/bin/python -m unittest discover -v
-```
-
-Unit-test agent/browser responses are synthetic fixtures, not live-run evidence.
-Development verification ran on Windows; macOS/Linux commands are provided but
-those platforms have not been tested in this session.
-
----
-
-**A controlled challenge. An evidence-driven repair. An unchanged browser test.**
+[Full documentation index](docs/README.md)
