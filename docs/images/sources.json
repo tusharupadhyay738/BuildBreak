@@ -32,9 +32,10 @@
       "source_commit": "a65b7ca"
     },
     {
-      "file": "arena-banner.svg",
-      "sha256": "cbb7eb7c10415f3c27555c008c17b6b302201419b0c546eb21e87a17536e4fd0",
-      "kind": "branding"
+      "file": "arena-checkout-banner.svg",
+      "sha256": "dd039c74120a17fcb160d9c911bf005d65100845ebd623075f046a400a0ace5b",
+      "kind": "Brand illustration of the recorded BreakShop discount repair.",
+      "battle": "20261118T090037-f46311d1"
     },
     {
       "file": "kane-failure.jpg",

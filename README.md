@@ -2,7 +2,7 @@ Gemini proposes a bug, Arena validates it, Kane CLI judges it, Codex repairs it.
 
 # BuildBreak Arena
 
-![BuildBreak Arena. Gemini challenges the app, Codex repairs it and Kane verifies the result.](docs/images/arena-banner.svg)
+![BuildBreak Arena. Kane caught a $5.40 discount on a $44.97 cart and verified $4.50 after one repair.](docs/images/arena-checkout-banner.svg)
 
 [Try Arena locally](#quickstart) · [Inspect a recorded repair](#see-the-evidence) · [Launch a battle](#launch-through-the-dashboard) · [Explore the code](#repository-map)
 
