@@ -1,20 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="440" viewBox="0 0 1440 440" role="img" aria-labelledby="title desc">
   <title id="title">BuildBreak Arena</title><desc id="desc">Challenge the test. Repair the app. Inspect the proof. Gemini challenges, Codex repairs, and Kane verifies.</desc>
-  <rect width="1440" height="440" rx="24" fill="#0b1320"/>
-  <path d="M1040 0v440M1160 0v440M1280 0v440M1400 0v440M980 100h460M980 220h460M980 340h460" stroke="#1c2d40" stroke-width="1"/>
-  <circle cx="1305" cy="100" r="110" fill="none" stroke="#2b4351" stroke-width="2"/>
-  <circle cx="1305" cy="100" r="72" fill="none" stroke="#bbf58a" stroke-opacity=".22" stroke-width="2"/>
-  <text x="64" y="67" fill="#bbf58a" font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="4">BUILD · CHALLENGE · VERIFY</text>
-  <text x="60" y="158" fill="#edf3fa" font-family="Arial,sans-serif" font-size="76" font-weight="800" letter-spacing="-3">BuildBreak <tspan fill="#bbf58a">Arena</tspan></text>
-  <text x="64" y="211" fill="#a5b5c9" font-family="Arial,sans-serif" font-size="25">Challenge the test. Repair the app. Inspect the proof.</text>
+  <rect width="1440" height="440" rx="24" fill="#f8fafc"/>
+  <path d="M1040 0v440M1160 0v440M1280 0v440M1400 0v440M980 100h460M980 220h460M980 340h460" stroke="#e2e8f0" stroke-width="1"/>
+  <circle cx="1305" cy="100" r="110" fill="none" stroke="#cbd5e1" stroke-width="2"/>
+  <circle cx="1305" cy="100" r="72" fill="none" stroke="#047857" stroke-opacity=".22" stroke-width="2"/>
+  <text x="64" y="67" fill="#047857" font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="4">BUILD · CHALLENGE · VERIFY</text>
+  <text x="60" y="158" fill="#0f172a" font-family="Arial,sans-serif" font-size="76" font-weight="800" letter-spacing="-3">BuildBreak <tspan fill="#047857">Arena</tspan></text>
+  <text x="64" y="211" fill="#475569" font-family="Arial,sans-serif" font-size="25">Challenge the test. Repair the app. Inspect the proof.</text>
   <g font-family="Arial,sans-serif">
-    <rect x="64" y="270" width="360" height="111" rx="12" fill="#131f30" stroke="#2b3b50"/>
-    <text x="88" y="306" font-size="13" font-weight="700" letter-spacing="2" fill="#93c6ff">01 / BREAKER</text><text x="88" y="344" font-size="23" font-weight="700" fill="#edf3fa">A validated challenge</text>
-    <path d="M442 326h34m-8-8 8 8-8 8" fill="none" stroke="#bbf58a" stroke-width="2"/>
-    <rect x="494" y="270" width="360" height="111" rx="12" fill="#131f30" stroke="#2b3b50"/>
-    <text x="518" y="306" font-size="13" font-weight="700" letter-spacing="2" fill="#93c6ff">02 / CODEX BUILDER</text><text x="518" y="344" font-size="23" font-weight="700" fill="#edf3fa">Repair from evidence</text>
-    <path d="M872 326h34m-8-8 8 8-8 8" fill="none" stroke="#bbf58a" stroke-width="2"/>
-    <rect x="924" y="270" width="452" height="111" rx="12" fill="#172b27" stroke="#466943"/>
-    <text x="948" y="306" font-size="13" font-weight="700" letter-spacing="2" fill="#bbf58a">03 / KANE REFEREE</text><text x="948" y="344" font-size="23" font-weight="700" fill="#edf3fa">Verify in a real browser</text>
+    <rect x="64" y="270" width="360" height="111" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="88" y="306" font-size="13" font-weight="700" letter-spacing="2" fill="#475569">01 / BREAKER</text><text x="88" y="344" font-size="23" font-weight="700" fill="#0f172a">A validated challenge</text>
+    <path d="M442 326h34m-8-8 8 8-8 8" fill="none" stroke="#047857" stroke-width="2"/>
+    <rect x="494" y="270" width="360" height="111" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="518" y="306" font-size="13" font-weight="700" letter-spacing="2" fill="#475569">02 / CODEX BUILDER</text><text x="518" y="344" font-size="23" font-weight="700" fill="#0f172a">Repair from evidence</text>
+    <path d="M872 326h34m-8-8 8 8-8 8" fill="none" stroke="#047857" stroke-width="2"/>
+    <rect x="924" y="270" width="452" height="111" rx="12" fill="#ecfdf5" stroke="#a7f3d0"/>
+    <text x="948" y="306" font-size="13" font-weight="700" letter-spacing="2" fill="#047857">03 / KANE REFEREE</text><text x="948" y="344" font-size="23" font-weight="700" fill="#0f172a">Verify in a real browser</text>
   </g>
 </svg>
