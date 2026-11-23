@@ -1,0 +1,23 @@
+{
+  "index.html": "802330f2fb8a6a359906735dbf8363d859248bea2b9c3459ae670276eb5b009f",
+  "src/App.tsx": "588656e2c40a99a19e30fba1425da3375f4b57c9abf8e819ffd25177635a5f45",
+  "src/api/seatpilotClient.ts": "1f61c6a714bef0affda71cf2b762ef0cc2a54b78fe3e8160157f4dd261675638",
+  "src/assets/images/event_kinetica_pavilion_1794927064811.jpg": "176897c35069b54f8edb84c0a79ed2e71c1bbb5288a16f6bb0e9c900764b2402",
+  "src/assets/images/event_nocturne_strings_1794927064578.jpg": "2771ee979814e36aac163f413e311ad0f0ff0ed94b5c3f2e3c13705d463febc0",
+  "src/assets/images/event_solstice_cinema_1794927063910.jpg": "37df486a4a29505af8d0a545df043186e659acf96d13b2bf0547a6d53aaa6e5d",
+  "src/assets/images/hero_concert_hall_1794927063726.jpg": "203b057c8c9997b2739fc3d89a3776e68874ad1323596320e561fd3e0557ccec",
+  "src/components/ApiContractDocs.tsx": "85b3fe150bd581876fa7d563ab3aaafc2ff0cb03cb5ff702a7e39f09acd727a5",
+  "src/components/BookingConfirmation.tsx": "7002c9bd3c9639ec0d0f085e77428d55d222b3e90019b534b1b88d415c4d3d89",
+  "src/components/BookingLookupBar.tsx": "27cbe6fd5e257fcf6af8c99788e0f41631cdac1d61fdc263bffd810ae2379863",
+  "src/components/CheckoutPanel.tsx": "ce2801aba5e0e01df86652a939cb6072de5a89003669d78e280c0b94ab8c5799",
+  "src/components/EventCatalog.tsx": "4c1277750b5c3b6ae9367a402ef5ba7af8df328d4b70a9f43873a147066f04b3",
+  "src/components/EventDetailModal.tsx": "d9d503e726ef00dcc06d25f6b4f1743e75b554e6b3decb786a466e8a40a00ef3",
+  "src/components/Footer.tsx": "4a65df8348003d20fb6c243bead03638a2e06cb2b67bd131c37445bc9c4ee911",
+  "src/components/HeroSection.tsx": "5c39555cd3d3cdffe2e1e3621f33fbc35ec78745a78f853a585f10ec5c86ef5b",
+  "src/components/Navbar.tsx": "fdc80c3f81e9770f3d07b3795deaa346ca7750627c3bbc51a1a0f3ab549eb6e2",
+  "src/data/demoFixtures.ts": "a74349db2f2d032e9f01afd2ab903b835c731dfae31a6aa3e89266e1dc3bf921",
+  "src/index.css": "b9a33c1360866dd5c67bae8aa769a130f689a0e680cc194087a2a0e96a76f40c",
+  "src/main.tsx": "30d02ee59cb6576973dea4368093b2dcae692a40668f288fdbc66a114873fcd3",
+  "src/types/booking.ts": "0b1dff0e346e1f7d7d7af7c76d2225067d38d5f335efeb163c5b836629f0a4b5",
+  "src/utils/formatters.ts": "3669e9bf4844a4d26b33b5fd0c1a4334f07aef615d2758c56b948d817f2daaab"
+}

@@ -34,3 +34,7 @@ This local Chrome test lets Flask save a two-ticket booking, drops the first
 confirmation response, reloads the page and repeats the request. It checks
 that the same reference returns and exactly two seats were reserved. It runs
 against a temporary database and makes no Kane or model calls.
+
+For the Arena history search and reset controls, run
+`python -m tests.arena_browser_search` with the same Chrome and Playwright setup.
+It exercises the labeled sample preview against the Flask console assets.

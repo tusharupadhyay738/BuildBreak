@@ -1195,7 +1195,13 @@ export function renderArenaDashboard(state) {
     return parts.join('\n');
   }
 
-  const activeBattle = selectedBattle || payload.battles[0];
+  if (!selectedBattle) {
+    if (activePreviewKey === 'archive') parts.push(renderLiveRunner());
+    parts.push(renderHistorySection(payload.battles, filteredBattles, null, {outcomeFilter, searchQuery}));
+    return parts.join('\n');
+  }
+
+  const activeBattle = selectedBattle;
 
   parts.push(
     renderOverviewSection(activeBattle, {

@@ -100,7 +100,7 @@ export function initArenaDashboard() {
       searchQuery: state.searchQuery,
     });
     return resolveSelectedBattle(
-      filteredBattles.length > 0 ? filteredBattles : state.payload.battles,
+      filteredBattles,
       state.selectedBattleId,
     );
   }
@@ -206,7 +206,7 @@ export function initArenaDashboard() {
     }
 
     const selectedBattle = resolveSelectedBattle(
-      filteredBattles.length > 0 ? filteredBattles : state.payload.battles,
+      filteredBattles,
       state.selectedBattleId,
     );
 

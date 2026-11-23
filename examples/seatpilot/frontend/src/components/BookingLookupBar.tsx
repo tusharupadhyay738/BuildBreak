@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { RotateCcw, Search } from 'lucide-react';
-import { SAMPLE_DEMO_BOOKING_ID } from '../data/demoFixtures';
 import type { BookingRecord } from '../types/booking';
 
 interface BookingLookupBarProps {
@@ -39,20 +38,7 @@ export const BookingLookupBar: React.FC<BookingLookupBarProps> = ({
               Retrieve Saved Booking Confirmation
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-[#525866]">
-              Look up any confirmation reference via{' '}
-              <span className="font-mono text-[#111315]">GET /api/bookings/:id</span>. Try sample
-              reference{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery(SAMPLE_DEMO_BOOKING_ID);
-                  onLookupBooking(SAMPLE_DEMO_BOOKING_ID);
-                }}
-                className="font-mono font-semibold text-[#1D4ED8] hover:underline underline-offset-2 cursor-pointer"
-              >
-                {SAMPLE_DEMO_BOOKING_ID}
-              </button>{' '}
-              or pick a recent session pass.
+              Enter the reference from your booking confirmation to retrieve your saved tickets.
             </p>
 
             {sessionBookings.length > 0 && (
@@ -94,7 +80,7 @@ export const BookingLookupBar: React.FC<BookingLookupBarProps> = ({
                   aria-label="Booking reference ID"
                   value={query}
                   onChange={(e) => setQuery(e.target.value.toUpperCase())}
-                  placeholder="SP-204810"
+                  placeholder="Booking reference"
                   className="block w-full min-h-[44px] rounded-lg border border-[#D4D4D8] bg-white pl-9 pr-3 py-2 font-mono text-sm text-[#111315] placeholder:text-[#A1A1AA] focus:border-[#1D4ED8] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]/20"
                 />
               </div>

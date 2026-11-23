@@ -64,6 +64,15 @@ class BookingRetryBrowserTest(unittest.TestCase):
         expect(page.locator("#confirmation")).to_contain_text("$115.60")
         self.assertEqual(attempts, [(201, attempts[0][1]), (200, attempts[0][1])])
 
+        reference = attempts[0][1]
+        lookup = page.get_by_role("region", name="Retrieve saved booking")
+        expect(lookup.get_by_role("button", name="SP-204810")).to_have_count(0)
+        lookup.get_by_role("textbox").fill(reference.lower())
+        with page.expect_response(lambda response: response.url == url + "/api/bookings/" + reference) as saved:
+            lookup.get_by_role("button", name="Look Up").click()
+        self.assertEqual(saved.value.status, 200)
+        expect(page.locator("#confirmation")).to_contain_text(reference)
+
     def book_two_tickets(self, page):
         page.locator("#checkout-event-select").select_option("evt-nocturne-symphony")
         page.locator("#discount-code-input").fill("EARLY15")
