@@ -1,4 +1,5 @@
 """Real local API tests; fixture attendees never represent live customer data."""
+from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 from pathlib import Path
 import tempfile
@@ -71,6 +72,32 @@ class SeatPilotTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/events').json[0]['availableSeats'],40)
         other=runtime.create_app(dict(TESTING=True,DATABASE=self.database)).test_client()
         self.assertEqual(other.get('/api/bookings/'+reference).json,response.json)
+
+    def test_concurrent_retries_reserve_seats_once_and_survive_restart(self):
+        headers = {'Idempotency-Key': 'same-ticket-request'}
+        def submit(_):
+            with self.app.test_client() as client:
+                response = client.post('/api/bookings', json=self.payload, headers=headers)
+                return response.status_code, response.json
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = workers.map(submit, range(2))
+        self.assertCountEqual([first[0], second[0]], [200, 201])
+        self.assertEqual(first[1], second[1])
+        restarted = runtime.create_app(dict(TESTING=True, DATABASE=self.database)).test_client()
+        replay = restarted.post('/api/bookings', json=self.payload, headers=headers)
+        self.assertEqual((replay.status_code, replay.json), (200, first[1]))
+        self.assertEqual(restarted.get('/api/events').json[0]['availableSeats'], 40)
+
+    def test_conflicting_retry_and_new_booking(self):
+        headers = {'Idempotency-Key': 'initial-ticket-request'}
+        original = self.client.post('/api/bookings', json=self.payload, headers=headers)
+        conflict = self.client.post('/api/bookings', json=dict(self.payload, quantity=3), headers=headers)
+        self.assertEqual((conflict.status_code, conflict.json['error']), (409, 'REQUEST_KEY_CONFLICT'))
+        self.assertEqual(self.client.get('/api/events').json[0]['availableSeats'], 40)
+        new = self.client.post('/api/bookings', json=self.payload, headers={'Idempotency-Key': 'another-ticket-request'})
+        self.assertEqual(new.status_code, 201)
+        self.assertNotEqual(new.json['id'], original.json['id'])
+        self.assertEqual(self.client.get('/api/events').json[0]['availableSeats'], 38)
 
     def test_capacity_cannot_be_oversold(self):
         for _ in range(5):

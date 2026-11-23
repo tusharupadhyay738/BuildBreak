@@ -1,7 +1,7 @@
 {
   "index.html": "802330f2fb8a6a359906735dbf8363d859248bea2b9c3459ae670276eb5b009f",
   "src/App.tsx": "588656e2c40a99a19e30fba1425da3375f4b57c9abf8e819ffd25177635a5f45",
-  "src/api/seatpilotClient.ts": "23e800866c859b43f84036bc11a060f83173bb3794479590cac8ad282c31f0f4",
+  "src/api/seatpilotClient.ts": "1f61c6a714bef0affda71cf2b762ef0cc2a54b78fe3e8160157f4dd261675638",
   "src/assets/images/event_kinetica_pavilion_1794927064811.jpg": "176897c35069b54f8edb84c0a79ed2e71c1bbb5288a16f6bb0e9c900764b2402",
   "src/assets/images/event_nocturne_strings_1794927064578.jpg": "2771ee979814e36aac163f413e311ad0f0ff0ed94b5c3f2e3c13705d463febc0",
   "src/assets/images/event_solstice_cinema_1794927063910.jpg": "37df486a4a29505af8d0a545df043186e659acf96d13b2bf0547a6d53aaa6e5d",

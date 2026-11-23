@@ -66,16 +66,24 @@ export const apiExchangeBus = {
  */
 async function requestWithDemoFallback<T>(
   method: 'GET' | 'POST', path: string, requestBody: unknown,
-  _designPreviewOnly: () => Promise<T>
+  _designPreviewOnly: () => Promise<T>,
+  bookingKey?: string
 ): Promise<ApiResult<T>> {
   let response: Response;
   try {
     response = await fetch(path, {
       method, body: requestBody !== undefined ? JSON.stringify(requestBody) : undefined,
-      headers: {Accept:'application/json', ...(requestBody !== undefined ? {'Content-Type':'application/json'} : {})},
+      headers: {
+        Accept: 'application/json',
+        ...(requestBody !== undefined ? {'Content-Type': 'application/json'} : {}),
+        ...(bookingKey ? {'Idempotency-Key': bookingKey} : {}),
+      },
     });
   } catch {
-    throw new SeatPilotApiError(503, {error:'BACKEND_UNAVAILABLE', message:'The real booking API is unavailable. No demo booking was created.'});
+    const message = bookingKey
+      ? 'Booking confirmation did not arrive. Retry with the same details to retrieve your reservation.'
+      : 'The booking API is unavailable. Please try again.';
+    throw new SeatPilotApiError(503, {error: 'BACKEND_UNAVAILABLE', message});
   }
   if (!(response.headers.get('content-type') || '').includes('application/json')) {
     throw new SeatPilotApiError(503, {error:'BACKEND_UNAVAILABLE', message:'A real JSON booking API is required. Demo fixture fallback is disabled.'});
@@ -89,6 +97,23 @@ async function requestWithDemoFallback<T>(
     throw new SeatPilotApiError(response.status,{error:error?.error || 'SERVER_ERROR',message:error?.message || 'Server rejected the request.',field:error?.field});
   }
   return {data:body as T,source:'flask-api'};
+}
+
+// Keep the key for an unconfirmed request across retries and same-tab reloads.
+const pendingBookings = new Map<string, string>();
+
+async function pendingBookingKey(payload: CreateBookingRequest) {
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  const storageKey = 'seatpilot_pending_' + Array.from(digest, b => b.toString(16).padStart(2, '0')).join('');
+  let key = pendingBookings.get(storageKey);
+  if (!key) {
+    try { key = sessionStorage.getItem(storageKey) || undefined; } catch { /* Storage may be disabled. */ }
+    key ??= crypto.randomUUID();
+    pendingBookings.set(storageKey, key);
+    try { sessionStorage.setItem(storageKey, key); } catch { /* In-page retries still work. */ }
+  }
+  return {key, storageKey};
 }
 
 export const seatpilotClient = {
@@ -108,9 +133,17 @@ export const seatpilotClient = {
 
   /** POST /api/bookings */
   async createBooking(payload: CreateBookingRequest): Promise<ApiResult<BookingRecord>> {
-    const result = await requestWithDemoFallback<BookingRecord>('POST', '/api/bookings', payload, () =>
-      demoFixtureBackend.createBooking(payload)
-    );
+    const {key, storageKey} = await pendingBookingKey(payload);
+    const result = await requestWithDemoFallback<BookingRecord>('POST', '/api/bookings', payload,
+      () => demoFixtureBackend.createBooking(payload), key);
+    if (!result.data?.id) {
+      throw new SeatPilotApiError(503, {error: 'INVALID_BACKEND_RESPONSE', message: 'Booking reference missing. Retry with the same details.'});
+    }
+    // A delayed response for an earlier request must not clear a newer key.
+    if (pendingBookings.get(storageKey) === key) {
+      pendingBookings.delete(storageKey);
+      try { sessionStorage.removeItem(storageKey); } catch { /* Storage may be disabled. */ }
+    }
     try {
       const stored = JSON.parse(window.localStorage.getItem('seatpilot_server_booking_refs') || '{}');
       stored[result.data.id] = result.data;

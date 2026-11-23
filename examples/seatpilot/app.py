@@ -5,6 +5,7 @@ No payments, seeded bookings, browser fixture fallback or production guarantees.
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from decimal import Decimal, ROUND_HALF_UP
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -89,7 +90,9 @@ def create_app(config=None):
             connection.close()
     with db() as connection:
         connection.executescript('CREATE TABLE IF NOT EXISTS inventory(event_id TEXT PRIMARY KEY, remaining INTEGER NOT NULL CHECK(remaining>=0));'
-                                 'CREATE TABLE IF NOT EXISTS bookings(id TEXT PRIMARY KEY, payload TEXT NOT NULL);')
+                                 'CREATE TABLE IF NOT EXISTS bookings(id TEXT PRIMARY KEY, payload TEXT NOT NULL);'
+                                 'CREATE TABLE IF NOT EXISTS booking_requests('
+                                 'request_key TEXT PRIMARY KEY, body_hash TEXT NOT NULL, booking_id TEXT NOT NULL REFERENCES bookings(id));')
         connection.executemany('INSERT OR IGNORE INTO inventory VALUES (?,?)',
                               [(event['id'], event['availableSeats']) for event in CATALOG])
 
@@ -121,8 +124,23 @@ def create_app(config=None):
             raise InvalidBooking('INVALID_ATTENDEE_EMAIL', 'Please enter a valid email address.', 'email')
         if len(re.sub(r'\D', '', person['phone'])) < 7:
             raise InvalidBooking('INVALID_ATTENDEE_PHONE', 'Please enter a fictional phone number.', 'phone')
+        request_key = request.headers.get('Idempotency-Key')
+        if request_key is not None:
+            if not re.fullmatch(r'[a-zA-Z0-9_-]{16,128}', request_key):
+                raise InvalidBooking('INVALID_REQUEST_KEY', 'Invalid booking request key.')
+            body = json.dumps(payload, sort_keys=True, separators=(',', ':'))
+            body_hash = hashlib.sha256(body.encode('utf-8')).hexdigest()
         with db() as connection:
             connection.execute('BEGIN IMMEDIATE')
+            if request_key is not None:
+                previous = connection.execute(
+                    'SELECT r.body_hash, b.payload FROM booking_requests r '
+                    'JOIN bookings b ON b.id = r.booking_id WHERE r.request_key = ?', (request_key,)
+                ).fetchone()
+                if previous:
+                    if previous[0] != body_hash:
+                        raise InvalidBooking('REQUEST_KEY_CONFLICT', 'This key belongs to a different booking request.', status=409)
+                    return jsonify(json.loads(previous[1])), 200
             result = quote(connection, payload)
             event = EVENTS[result['eventId']]
             record = dict(result, id='SP-' + uuid.uuid4().hex[:10].upper(), status='confirmed',
@@ -132,6 +150,9 @@ def create_app(config=None):
             connection.execute('UPDATE inventory SET remaining=remaining-? WHERE event_id=?',
                                (result['quantity'], result['eventId']))
             connection.execute('INSERT INTO bookings VALUES (?,?)', (record['id'], json.dumps(record)))
+            if request_key is not None:
+                connection.execute('INSERT INTO booking_requests(request_key, body_hash, booking_id) VALUES (?,?,?)',
+                                   (request_key, body_hash, record['id']))
         return jsonify(record), 201
 
     @app.get('/api/bookings/<reference>')

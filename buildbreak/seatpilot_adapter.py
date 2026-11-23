@@ -22,7 +22,7 @@ def sha(path):
 
 def matches_export(folder):
     try:
-        for version in ('original', 'adapted'):
+        for version in ('original', 'adapted', 'adapted-v1'):
             manifest = json.loads((EXAMPLE / (version+'-source-sha256.json')).read_text(encoding='utf-8'))
             if all((folder/name).is_file() and not (folder/name).is_symlink()
                    and sha(folder/name) == expected for name, expected in manifest.items()):

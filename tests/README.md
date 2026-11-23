@@ -25,3 +25,12 @@ checkout definition and its hash protection are unchanged.
 The runner copies the app tests into isolated snapshots using their original
 `test_app.py` and `test_arena.py` names. This preserves strict cache bindings and
 the existing app-test subprocess contract while keeping the repository tidy.
+
+## SeatPilot booking retries
+
+With Chrome, Node.js, npm and the optional Python package `playwright` installed,
+run `python -m tests.seatpilot_browser_retry` using the project environment.
+This local Chrome test lets Flask save a two-ticket booking, drops the first
+confirmation response, reloads the page and repeats the request. It checks
+that the same reference returns and exactly two seats were reserved. It runs
+against a temporary database and makes no Kane or model calls.
