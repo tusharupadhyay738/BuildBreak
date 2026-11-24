@@ -99,7 +99,7 @@ def snapshot(source, destination):
     files = ['app.py', 'arena.py', 'test_app.py', 'test_arena.py',
              'buildbreak/__init__.py', 'buildbreak/arena.py', 'buildbreak/import_battle.py',
              'buildbreak/battle_history.py', 'buildbreak/evidence_images.py', 'buildbreak/console_payload.py',
-             'buildbreak/kane_live.py',
+             'buildbreak/kane_live.py', 'buildbreak/generated_suite.py',
              'buildbreak/live_browser.py', 'buildbreak/project_import.py', 'buildbreak/project_setup.py',
              'buildbreak/seatpilot_adapter.py', 'buildbreak/seatpilot_runner.py',
              'requirements.txt', TEST.as_posix()]
@@ -179,7 +179,7 @@ class Server:
             log.close()
         self.logs = []
 
-def classify_kane(events, exit_code):
+def classify_kane(events, exit_code, expected_steps=5):
     summaries = [e for e in events if e.get('type') == 'test_md_summary']
     done = [e for e in events if e.get('type') == 'test_md_done']
     if not summaries or not done:
@@ -190,7 +190,7 @@ def classify_kane(events, exit_code):
         return 'infrastructure_error'
     if status == 'passed' and exit_code == 0:
         steps = summary.get('steps', {})
-        return 'passed' if steps.get('passed') == 5 and steps.get('total') == 5 else 'infrastructure_error'
+        return 'passed' if steps.get('passed') == expected_steps and steps.get('total') == expected_steps else 'infrastructure_error'
     failed_assertion = any(e.get('type') == 'step_event' and e.get('event') == 'assertion'
                            and e.get('passed') is False for e in events)
     if status == 'failed' and exit_code != 0 and failed_assertion:
@@ -295,11 +295,19 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=F
     test_path = Path(test_path)
     if test_path not in {TEST, Path('.testmuai/tests/SeatPilotBooking_test.md')}:
         raise ValueError('Unknown protected acceptance suite')
+    return _run_testmd(workspace, artifacts, url, name, kane, test_path, 5, timeout,
+                       show_browser, on_line, cdp_endpoint)
+
+
+def _run_testmd(workspace, artifacts, url, name, kane, test_path, expected_steps, timeout=1200,
+                show_browser=False, on_line=None, cdp_endpoint=None, variables_file=None):
     artifacts.mkdir(parents=True, exist_ok=False)
     test_hash = digest(workspace / test_path)
     args = [kane, 'testmd', 'run', str(test_path), '--override-start-url', url,
             '--target', 'desktop', '--no-adaptive-heal',
             '--timeout', '300', '--name', name, '--agent']
+    if variables_file is not None:
+        args.extend(['--variables-file', str(variables_file)])
     if not show_browser:
         args.append('--headless')
     if cdp_endpoint is not None:
@@ -331,7 +339,7 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=F
             pass
     if digest(workspace / test_path) != test_hash:
         raise ValueError('Kane test definition changed during execution')
-    result = 'infrastructure_error' if timed_out else classify_kane(events, exit_code)
+    result = 'infrastructure_error' if timed_out else classify_kane(events, exit_code, expected_steps)
     evidence, pack, evidence_source = find_evidence_pack(events, workspace)
     pack_hash = None
     if pack:
