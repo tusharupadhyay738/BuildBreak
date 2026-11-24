@@ -927,6 +927,7 @@ export function initArenaDashboard() {
     if (event.target.closest('#project-import')) importProject();
     else if (event.target.closest('#project-builtin')) loadProject('builtin');
     else if (event.target.closest('#project-seatpilot')) loadProject('seatpilot');
+    else if (event.target.closest('#project-generated')) loadProject('seatpilot-generated');
     else if (event.target.closest('#project-start')) launchProject();
   });
   document.addEventListener('change',(event)=>{

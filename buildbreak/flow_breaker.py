@@ -25,7 +25,7 @@ def build_flow_guided_prompt(target_name: str, flow_map: Dict[str, Any], source_
         f"Observed pages: {', '.join(pages) if pages else '/'}\n"
         f"Observed user controls: {', '.join(controls[:10]) if controls else 'storefront controls'}\n\n"
         "Rules:\n"
-        "- Change ONLY logic in the backend calculations or handlers corresponding to these flows.\n"
+        "- Change only numeric constants in the SeatPilot pricing() function affecting the EARLY15 quote.\n"
         "- Keep all routes, signatures, imports, database schemas, and other files unchanged.\n"
         "- Maximum 6 lines and 500 characters per old_text/new_text; old_text must appear exactly once.\n"
         "- No imports, new external calls, or full-file replacements.\n"

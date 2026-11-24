@@ -159,7 +159,17 @@ def mutation(workspace, proposal):
     return candidate
 
 
-def validate_fault(workspace, artifacts, python, manifest, proposal, server_class):
+def observe_quote(url):
+    from .differential_check import DifferentialProbeError, probe_http_endpoint
+    quote = probe_http_endpoint(url, '/api/quote', 'POST',
+        {'eventId': 'evt-nocturne-symphony', 'quantity': 2, 'discountCode': 'EARLY15'})['json']
+    fields = ('subtotal', 'discountAmount', 'total')
+    if not isinstance(quote, dict) or any(type(quote.get(key)) not in (int, float) for key in fields):
+        raise DifferentialProbeError('Quote probe returned an unexpected schema')
+    return {key: quote[key] for key in fields}
+
+
+def validate_fault(workspace, artifacts, python, manifest, proposal, server_class, healthy_quote=None):
     protected(workspace,manifest)
     candidate=mutation(workspace,proposal)
     artifacts.mkdir(parents=True,exist_ok=False)
@@ -174,10 +184,14 @@ def validate_fault(workspace, artifacts, python, manifest, proposal, server_clas
     server.ready_marker=b'SeatPilot'
     try:
         server.start()
+        if healthy_quote is not None:
+            from .differential_check import compare_differential_observations
+            different, reason = compare_differential_observations(healthy_quote, observe_quote(server.url))
+            if not different:
+                raise InvalidFault(reason)
     finally:
         server.stop()
-    observed=direct_check(copy,artifacts/'direct',python)
     protected(copy,manifest,allow_app=True)
-    if observed['passed']:
+    if healthy_quote is None and direct_check(copy,artifacts/'direct',python)['passed']:
         raise InvalidFault('The independent SeatPilot saved-booking invariant did not fail.')
     return candidate

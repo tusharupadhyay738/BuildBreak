@@ -51,6 +51,31 @@ class ProjectSetupTests(unittest.TestCase):
         self.requirements.stop()
         self.temp.cleanup()
 
+    def test_generated_project_rechecks_the_approved_hash_before_launch(self):
+        from buildbreak.generated_suite import approve, digest
+        folder = self.root.resolve()
+        name = 'catalog_test.md'
+        data = b'## Step 1\nInspect fictional catalog.\n'
+        (folder/name).write_bytes(data)
+        sha = digest(data)
+        suite = folder/'.testmuai/tests/generated/seatpilot-attempt-02'
+        approve(folder, suite, {name:sha})
+        url = '/api/projects/seatpilot-generated'
+        args = dict(approved=True, breaker='scripted', test_sha256=sha)
+        with patch('buildbreak.project_setup.ROOT',folder), \
+             patch('buildbreak.project_setup.start_battle',return_value=SimpleNamespace(status='running')) as launch:
+            self.assertEqual(self.client.post(url+'/battle',json=args,headers=self.headers).status_code,400)
+            launch.assert_not_called()
+            runs = [dict(test_hash=sha,result='passed',evidence_id=f'fixture-{i}') for i in (1,2)]
+            (suite/'qualification.json').write_text(json.dumps({name:dict(status='kept',runs=runs)}))
+            info = self.client.get(url+'/preflight').get_json()
+            self.assertEqual(info['test_sha256'],sha)
+            self.assertEqual(info['test_text'],data.decode())
+            self.assertEqual(self.client.post(url+'/battle',json=dict(args,test_sha256='old'),headers=self.headers).status_code,400)
+            with patch('buildbreak.project_setup.shutil.which',return_value='fixture-node'):
+                self.assertEqual(self.client.post(url+'/battle',json=args,headers=self.headers).status_code,200)
+            self.assertEqual(launch.call_args.kwargs,dict(adapter_name='seatpilot',generated_hash=sha))
+
     def compatible_zip(self):
         return archive({'export/app.py': (ROOT / 'app.py').read_bytes(),
                         'export/templates/shop.html': (ROOT / 'templates/shop.html').read_text().replace('BreakShop', 'Imported fixture'),

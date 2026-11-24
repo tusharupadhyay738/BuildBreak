@@ -1066,6 +1066,7 @@ function renderProjectSetup() {
     <p class="text-sm text-slate-600">Choose a demo to see what Kane will check, or import a supported source ZIP.</p>
     <div class="flex flex-wrap items-center gap-3">
       <button id="project-seatpilot" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Try SeatPilot ticket booking</button>
+      <button id="project-generated" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">SeatPilot generated suite</button>
       <button id="project-builtin" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Use built-in BreakShop</button>
       <input id="project-zip" type="file" accept=".zip,application/zip" aria-label="Project source ZIP" class="text-sm text-slate-700">
       <button id="project-import" type="button" class="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Import ZIP</button>
