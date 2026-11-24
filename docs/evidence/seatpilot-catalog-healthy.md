@@ -12,3 +12,9 @@ In the first run, Kane reported that Chamber Music appeared selected and one car
 Kane's balance decreased by approximately 62.55 credits across the two browser checks and their measurement window. This is an account-level estimate. The earlier exploration and context extraction reported about 6.24 credits combined and the single design run reported 12.62.
 
 Open `/arena` for the recorded qualification counts. The dashboard describes a regression baseline for observed behavior. The authored flow leaves initial card count and reset to All Programs untested. The curated demo still selects its existing protected test.
+
+## Second attempt, awaiting use-case review
+
+A local Playwright inspection read the event-card headings inside Featured Events on a disposable SeatPilot database. With only local GET requests permitted, Chrome showed all three catalog titles, then only Nocturne Symphony after selecting Chamber Music, then the original three titles after choosing All Programs. This independently checks the [revised requirements](../specs/seatpilot-catalog-round-trip.md). The browser inspection does not qualify a Kane test.
+
+Kane ingested the revised requirements in a separate local context. Extraction reported 2.08 credits and queued one derived use case, `uc-1`, “Filter Featured Events and restore all programs.” There was no new exploration, test-design call or Kane browser run in this attempt before human review.
