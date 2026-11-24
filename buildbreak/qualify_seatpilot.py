@@ -38,13 +38,18 @@ def healthy_run(suite, name, directory, kane, show_browser):
     return {key: result[key] for key in ("result", "evidence_id", "test_hash")}
 
 
-def qualify(root, show_browser=False):
-    suite = root / ".testmuai/tests/generated/seatpilot"
+def qualify(root, show_browser=False, revision="seatpilot"):
+    if revision not in {"seatpilot", "seatpilot-attempt-02"}:
+        raise ValueError("Unknown SeatPilot suite")
+    suite = root / ".testmuai/tests/generated" / revision
     manifest = verify(suite)
     receipt = suite / "qualification.json"
     if receipt.exists():
         raise FileExistsError("A healthy qualification is already recorded for this suite")
-    output = root / "instance/targets/seatpilot/qualification"
+    target = root / "instance/targets/seatpilot"
+    if revision == "seatpilot-attempt-02":
+        target = target / "attempt-02"
+    output = target / "qualification"
     kane = executable("kane-cli")
     output.mkdir(parents=True, exist_ok=False)
     results = {}
@@ -66,4 +71,6 @@ def qualify(root, show_browser=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--show-browser", action="store_true")
-    qualify(ROOT, parser.parse_args().show_browser)
+    parser.add_argument("--revision", choices=("seatpilot", "seatpilot-attempt-02"), default="seatpilot")
+    args = parser.parse_args()
+    qualify(ROOT, args.show_browser, args.revision)
