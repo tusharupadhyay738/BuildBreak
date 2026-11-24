@@ -9,6 +9,7 @@ from flask import render_template, request, abort, url_for
 from datetime import datetime, timedelta, timezone
 from .battle_history import decorate, summarize
 from .evidence_images import screenshot_for
+from .generated_suite import dashboard_suites
 from .console_payload import console_payload
 from .kane_live import start_live_session, get_active_session
 
@@ -54,6 +55,7 @@ def register_arena(app):
     app.jinja_env.filters['arena_state'] = lambda value: STATE_LABELS.get(value, 'Unknown state')
     app.jinja_env.filters['arena_time'] = display_time
     app.config.setdefault("ARENA_DATABASE", str(Path(app.instance_path) / "arena.sqlite3"))
+    app.config.setdefault("ARENA_GENERATED_SUITES", Path(app.root_path) / ".testmuai/tests/generated")
     app.config.setdefault("ARENA_SOURCES", str(Path(app.instance_path) / "arena-sources.json"))
     app.config.setdefault('ARENA_ARTIFACTS', str(Path(app.instance_path) / 'battles'))
     with closing(sqlite3.connect(app.config["ARENA_DATABASE"])) as connection:
@@ -235,5 +237,6 @@ def register_arena(app):
         selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
         attach_screenshots(sessions, selected)
         return render_template("arena.html", battle=battle, runs=runs, evidence=evidence, sessions=sessions,
+                               generated_suites=dashboard_suites(Path(app.config["ARENA_GENERATED_SUITES"])),
                                selected_id=selected, scores=summarize(sessions),
                                console_payload=console_payload(sessions, app.config['ARENA_ARTIFACTS'], selected, display_time))
