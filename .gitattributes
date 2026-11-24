@@ -4,3 +4,4 @@
 /frontend/index.html text eol=lf
 /frontend/src/index.css text eol=lf
 /frontend/src/js/arena-sound.js text eol=lf
+/.testmuai/tests/generated/**/*_test.md -text
