@@ -18,3 +18,7 @@ Open `/arena` for the recorded qualification counts. The dashboard describes a r
 A local Playwright inspection read the event-card headings inside Featured Events on a disposable SeatPilot database. With only local GET requests permitted, Chrome showed all three catalog titles, then only Nocturne Symphony after selecting Chamber Music, then the original three titles after choosing All Programs. This independently checks the [revised requirements](../specs/seatpilot-catalog-round-trip.md). The browser inspection does not qualify a Kane test.
 
 Kane ingested the revised requirements in a separate local context. Extraction reported 2.08 credits and queued one derived use case, `uc-1`, “Filter Featured Events and restore all programs.” There was no new exploration, test-design call or Kane browser run in this attempt before human review.
+
+## Revised test qualification
+
+After review, Arena locked the generated three-checkpoint definition at SHA-256 `f11498a9728ff6cdb6a40e92cae584685b67374ab8da6bcd2c9e3878202a048a`. Healthy runs `1cdc5b1b-949b-4958-b525-9fa6547a89fa` and `8b3e4501-81ff-45d8-93c1-fff5c1eb5158` both passed on fresh disposable copies. Arena checked the sealed packs against the target URLs and definition digest. The revised test is **kept**. The account balance decreased by about 128.42 credits across that measurement window. The first, dropped proposal remains archived separately.

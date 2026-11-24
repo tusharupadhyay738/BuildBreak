@@ -1,0 +1,17 @@
+{
+  "seatpilot-featured-events-category-filter-and-reset_test.md": {
+    "status": "kept",
+    "runs": [
+      {
+        "result": "passed",
+        "evidence_id": "1cdc5b1b-949b-4958-b525-9fa6547a89fa",
+        "test_hash": "f11498a9728ff6cdb6a40e92cae584685b67374ab8da6bcd2c9e3878202a048a"
+      },
+      {
+        "result": "passed",
+        "evidence_id": "8b3e4501-81ff-45d8-93c1-fff5c1eb5158",
+        "test_hash": "f11498a9728ff6cdb6a40e92cae584685b67374ab8da6bcd2c9e3878202a048a"
+      }
+    ]
+  }
+}
