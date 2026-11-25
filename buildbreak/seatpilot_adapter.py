@@ -20,12 +20,21 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def export_sha(path):
+    """Normalize reviewed text exports only; runtime/test locks stay byte-exact."""
+    path = Path(path)
+    data = path.read_bytes()
+    if path.suffix in {'.ts', '.tsx', '.css', '.html', '.json'}:
+        data = data.replace(b'\r\n', b'\n')
+    return hashlib.sha256(data).hexdigest()
+
+
 def matches_export(folder):
     try:
         for version in ('original', 'adapted', 'adapted-v2', 'adapted-v1'):
             manifest = json.loads((EXAMPLE / (version+'-source-sha256.json')).read_text(encoding='utf-8'))
             if all((folder/name).is_file() and not (folder/name).is_symlink()
-                   and sha(folder/name) == expected for name, expected in manifest.items()):
+                   and export_sha(folder/name) == expected for name, expected in manifest.items()):
                 return True
         return False
     except (OSError, ValueError):
