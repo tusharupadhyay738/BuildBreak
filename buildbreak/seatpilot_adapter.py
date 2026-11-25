@@ -29,12 +29,23 @@ def export_sha(path):
     return hashlib.sha256(data).hexdigest()
 
 
+def export_hashes(path):
+    path = Path(path)
+    data = path.read_bytes()
+    candidates = {data}
+    if path.suffix in {'.ts', '.tsx', '.css', '.html', '.json'}:
+        lf_data = data.replace(b'\r\n', b'\n')
+        candidates.add(lf_data)
+        candidates.add(lf_data.replace(b'\n', b'\r\n'))
+    return {hashlib.sha256(candidate).hexdigest() for candidate in candidates}
+
+
 def matches_export(folder):
     try:
         for version in ('original', 'adapted', 'adapted-v2', 'adapted-v1'):
             manifest = json.loads((EXAMPLE / (version+'-source-sha256.json')).read_text(encoding='utf-8'))
             if all((folder/name).is_file() and not (folder/name).is_symlink()
-                   and export_sha(folder/name) == expected for name, expected in manifest.items()):
+                   and expected in export_hashes(folder/name) for name, expected in manifest.items()):
                 return True
         return False
     except (OSError, ValueError):
