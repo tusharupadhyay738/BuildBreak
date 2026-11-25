@@ -30,3 +30,5 @@ The test selects two Nocturne Symphony tickets, applies EARLY15 and checks the d
 Execution `fa073c79-bfb1-4814-9517-20bfda7aedc2` failed at step 2 on the changed copy. Kane recorded the $6.80 discount and $129.20 total and confirmed an application defect. Step 3 was skipped. Arena initially recorded this as an infrastructure error because its classifier required an assertion event, while this authoring run emitted a confirmed bug verdict instead.
 
 The classifier now also recognizes a confirmed application-issue verdict tied to a failed test step. Rechecking the saved stream classified this run as a verification failure, and the sealed pack passed the existing identifier, test-hash, URL and verdict validation. The original receipt and evidence remain unchanged. This recheck did not run Kane again or consume new browser credits. Two healthy-copy passes remain pending; the follow-up suite has not been promoted.
+
+The subsequent first healthy check passed the pricing assertion but stopped on a network-inspection timeout. Qualification remains blocked; see the [recorded outcome and credit use](seatpilot-pricing-qualification.md).
