@@ -193,7 +193,18 @@ def classify_kane(events, exit_code, expected_steps=5):
         return 'passed' if steps.get('passed') == expected_steps and steps.get('total') == expected_steps else 'infrastructure_error'
     failed_assertion = any(e.get('type') == 'step_event' and e.get('event') == 'assertion'
                            and e.get('passed') is False for e in events)
-    if status == 'failed' and exit_code != 0 and failed_assertion:
+    # Authoring runs can confirm a defect without emitting an assertion event.
+    # Require a matching failed test step; a diagnosis alone is not a result.
+    failed_steps = {e.get('step_index') for e in events
+                    if e.get('type') == 'test_md_step_end' and e.get('status') == 'failed'
+                    and type(e.get('step_index')) is int
+                    and 1 <= e['step_index'] <= expected_steps}
+    confirmed_defect = any(
+        e.get('type') == 'test_md_bug_verdict' and e.get('confirmed') is True
+        and e.get('family') == 'application_issue'
+        and type(e.get('step_index')) is int and e['step_index'] in failed_steps
+        for e in events)
+    if status == 'failed' and exit_code != 0 and (failed_assertion or confirmed_defect):
         return 'verification_failed'
     return 'infrastructure_error'
 

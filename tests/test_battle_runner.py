@@ -44,6 +44,26 @@ class BattleRunnerTests(unittest.TestCase):
         events[1]['overall_status'] = 'passed'
         self.assertEqual(classify_kane(events, 1), 'infrastructure_error')
 
+    def test_confirmed_authoring_defect_requires_matching_failed_step(self):
+        # Synthetic CLI events: these are not recorded live results.
+        events = [
+            {'type': 'test_md_summary', 'overall_status': 'failed'},
+            {'type': 'test_md_done', 'overall_status': 'failed'},
+            {'type': 'test_md_step_end', 'step_index': 2, 'status': 'failed'},
+            {'type': 'test_md_bug_verdict', 'step_index': 2,
+             'confirmed': True, 'family': 'application_issue'},
+        ]
+        self.assertEqual(classify_kane(events, 1, 3), 'verification_failed')
+        for change in ({'confirmed': False}, {'family': 'infrastructure_issue'},
+                       {'step_index': 1}, {'step_index': None}, {'step_index': True}):
+            with self.subTest(change=change):
+                altered = events[:-1] + [dict(events[-1], **change)]
+                self.assertEqual(classify_kane(altered, 1, 3), 'infrastructure_error')
+        self.assertEqual(classify_kane(events, 0, 3), 'infrastructure_error')
+        self.assertEqual(classify_kane(events, 1, 1), 'infrastructure_error')
+        events[0]['cancelled'] = True
+        self.assertEqual(classify_kane(events, 1, 3), 'infrastructure_error')
+
     def test_snapshot_excludes_private_state_and_detects_test_tampering(self):
         workspace = self.root / 'workspace'
         manifest = snapshot(ROOT, workspace)
