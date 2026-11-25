@@ -32,11 +32,13 @@ class ConsoleTests(unittest.TestCase):
             record_run(self.database, 'fixture', phase, int(phase == 'after'),
                        dict(result=result, evidence_id='synthetic', pack_hash='fixture', test_hash='fixture', duration=0))
 
-    def test_empty_archive_never_silently_substitutes_samples(self):
+    def test_empty_archive_offers_sample_replay_without_adding_sample_records(self):
         response = self.client.get('/arena/data')
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual((data['status'], data['isSample'], data['battles']), ('empty', False, []))
+        self.assertEqual(data['notice'], 'Showing a SAMPLE replay of recorded battles. Your own battles will appear here.')
+        self.assertIn(data['notice'].encode(), self.client.get('/arena').data)
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
         self.assertEqual(self.client.post('/arena/data').status_code, 405)
 
@@ -45,6 +47,7 @@ class ConsoleTests(unittest.TestCase):
         data = self.client.get('/arena/data').get_json()
         battle = data['battles'][0]
         self.assertEqual((data['isSample'], battle['isSample']), (False, False))
+        self.assertEqual((data['status'], len(data['battles'])), ('ready', 1))
         self.assertEqual((battle['id'], battle['breaker'], battle['faultFamily']), ('fixture', 'Gemini', 'pricing'))
         self.assertEqual(battle['comparisons'], [])
         self.assertEqual(battle['screenshots']['failure']['status'], 'missing')

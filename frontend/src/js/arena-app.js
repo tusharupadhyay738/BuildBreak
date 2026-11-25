@@ -10,6 +10,7 @@
 
 import {
   readInjectedPayload,
+  applySampleReplay,
   getPreviewPayload,
   filterBattles,
   countBattlesByView,
@@ -58,7 +59,7 @@ export function initArenaDashboard() {
 
   const state = {
     payload: readInjectedPayload(),
-    activePreviewKey: readInjectedPayload().isSample ? 'historical_demo' : 'archive',
+    activePreviewKey: null,
     selectedBattleId: null,
     outcomeFilter: 'all',
     searchQuery: '',
@@ -68,6 +69,9 @@ export function initArenaDashboard() {
     wipePercent: 50,
   };
 
+  state.activePreviewKey = state.payload.isSample && !state.payload.autoSample
+    ? 'historical_demo'
+    : 'archive';
   state.selectedBattleId = state.payload.activeBattleId || null;
 
   let replayTimerId = null;
@@ -936,12 +940,11 @@ export function initArenaDashboard() {
   loadProject('builtin');
 
   document.addEventListener('arena:archive-update', (event) => {
-    const payload = event.detail;
     const script = document.getElementById('arena-payload');
-    if (script) script.textContent = JSON.stringify(payload);
+    if (script) script.textContent = JSON.stringify(event.detail);
     if (state.activePreviewKey !== 'archive') return;
     if (document.activeElement?.id === 'battle-search' || document.activeElement?.closest('#project-setup-panel') || state.isReplayingStages || isDraggingWipe) return;
-    state.payload = payload;
+    state.payload = applySampleReplay(event.detail);
     render();
   });
   render();

@@ -1018,6 +1018,8 @@ export function renderBattleFilterBar({ payload, outcomeFilter, counts, filtered
   const activeTab = viewTabs.find((t) => t.key === outcomeFilter);
   const summaryText = !isReady
     ? 'Battle history filters unavailable in current state'
+    : payload.isSample
+      ? 'SAMPLE replay · not included in real battle counts'
     : activeTab
       ? `Showing ${filteredCount} of ${counts.all} battles (${activeTab.label})`
       : `Showing ${filteredCount} of ${counts.all} battles`;
