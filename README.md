@@ -1,8 +1,38 @@
-Gemini proposes a bug, Arena validates it, Kane CLI judges it, Codex repairs it. Built with Flask, SQLite, Codex and Kane CLI.
-
 # BuildBreak Arena
 
-![BuildBreak Arena. Kane caught a $5.40 discount on a $44.97 cart and verified $4.50 after one repair.](docs/images/arena-checkout-banner.svg)
+AI writes your tests. Arena shows which real bugs they would miss.
+
+## Recorded escape
+
+| Recorded quote for two tickets with EARLY15 | Healthy copy | Changed copy |
+| --- | ---: | ---: |
+| Subtotal | $136.00 | $136.00 |
+| Discount | $20.40 | $6.80 |
+| Total | $115.60 | $129.20 |
+| Recorded dashboard battle ID | `20261124T151404-6db82d63` | |
+
+The change was a scripted pricing change on an isolated SeatPilot copy. Kane's approved catalog test passed on the changed copy, so Arena exposed a coverage gap, and Kane then designed a pricing test for it. [Read the recorded evidence](docs/evidence/seatpilot-generated-escape.md).
+
+## Why separate roles
+
+- Kane writes and runs the tests.
+- Gemini proposes bugs without seeing the tests.
+- Codex repairs from failure evidence.
+- Approved tests are hash-locked so a repair cannot weaken them.
+
+The agent that writes the code shouldn't be the one grading it.
+
+## Using it on your own app
+
+- Supported demos today: bundled BreakShop and SeatPilot.
+- Generated testing today: one qualified suite and pricing edits only.
+- A new app needs a reviewed adapter and a repeatable observation.
+- Generated tests describe current behavior; they are regression tests, not proof of correctness.
+- Arena complements mutation testing and chaos engineering; it does not replace them.
+
+**Roadmap — NOT implemented:** a CI step, more apps, and more fault types.
+
+![Recorded BreakShop battle: Kane caught a $5.40 discount on a $44.97 cart and verified $4.50 after one repair.](docs/images/arena-checkout-banner.svg)
 
 [Try Arena locally](#quickstart) · [Inspect a recorded repair](#see-the-evidence) · [Launch a battle](#launch-through-the-dashboard) · [Explore the code](#repository-map)
 
@@ -14,7 +44,7 @@ Arena lets a developer rehearse that incident on a disposable copy. Give it a su
 
 ## See the evidence
 
-In one BreakShop run, the cart subtotal was **$44.97**. The discount should have been **$4.50**. After Gemini's change, Kane read **$5.40** in the browser. A fresh Codex session repaired the app on its first attempt. Kane then read **$4.50** and a **$40.47** total using the original test. The broken run stopped before it recorded a final total. [Read the November 18 run account](docs/evidence/gemini-pricing-battle-2026-11-18.md).
+In one recorded BreakShop run, the cart subtotal was **$44.97**. The discount should have been **$4.50**. After Gemini's change, Kane read **$5.40** in the browser. A fresh Codex session repaired the app on its first attempt. Kane then read **$4.50** and a **$40.47** total using the original test. The broken run stopped before it recorded a final total. [Read the November 18 run account](docs/evidence/gemini-pricing-battle-2026-11-18.md).
 
 ![Arena's comparison table for the recorded BreakShop battle. The discount moves from $5.40 before repair to the expected $4.50 after repair.](docs/images/arena-comparison.png)
 
@@ -32,7 +62,7 @@ In one BreakShop run, the cart subtotal was **$44.97**. The discount should have
 
 ## Quickstart
 
-**Browse the shop and console locally without an account.** From a clone of this repository, run the commands for your platform.
+**Browse the shop and console locally without an account.** No hosted public build is linked in this repository; from a clone, run the commands for your platform.
 
 **Windows PowerShell**
 
