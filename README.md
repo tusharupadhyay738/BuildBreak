@@ -52,6 +52,28 @@ In one recorded BreakShop run, the cart subtotal was **$44.97**. The discount sh
 
 ![The five stages of the recorded BreakShop run, ending with Kane verifying the repair.](docs/images/arena-timeline.png)
 
+```mermaid
+flowchart TD
+    START["Choose a supported app and test scenario"] --> KANE["Kane writes the acceptance test"]
+    KANE --> APPROVE["Developer reviews and approves the test"]
+    APPROVE --> LOCK["Lock the approved test hash"]
+    LOCK --> BASE["Kane runs the test on a healthy isolated copy"]
+    BASE --> FAULT["Breaker proposes or selects a bounded fault"]
+    FAULT --> VALIDATE["Arena validates the change and independently checks its impact"]
+    VALIDATE --> BROKEN["Kane runs the approved test on the changed copy"]
+    BROKEN --> DETECT{"Does the test detect the verified fault?"}
+    DETECT -->|No| ESCAPE["Record an escape and coverage gap"]
+    DETECT -->|Yes: failure evidence| REPAIR["Codex repairs from source, requirements, and failure evidence"]
+    REPAIR --> CHECK["Arena checks the repair and reruns relevant automated checks"]
+    CHECK -->|Checks pass| VERIFY["Kane reruns the same approved test"]
+    CHECK -->|Checks fail; attempts remain| REPAIR
+    CHECK -->|Three attempts exhausted| HUMAN["Route to human review"]
+    VERIFY --> PASS{"Does the same test pass?"}
+    PASS -->|Yes| DONE["Record the verified repair"]
+    PASS -->|No; attempts remain| REPAIR
+    PASS -->|Three attempts exhausted| HUMAN
+```
+
 | When you run a battle | What happens |
 | --- | --- |
 | **You approve the check** | Arena shows the acceptance test, protects its hash and runs the healthy baseline on an isolated copy with its own database. |
