@@ -69,6 +69,10 @@ SeatPilot is a second application with a different question to test. When someon
 
 Choose **SeatPilot generated suite** to run the approved catalog filter and reset test. It passed twice on fresh healthy copies. Arena compares the discount quote independently so a passing catalog check can reveal a gap in pricing coverage. [Generated-suite guide](docs/guides/generated-seatpilot.md) · [Recorded $13.60 pricing escape](docs/evidence/seatpilot-generated-escape.md).
 
+**Generated-mode scope:** bundled SeatPilot only, one qualified test in each selected suite, and numeric edits inside `pricing()` only. The dashboard currently selects the qualified catalog suite. A follow-up pricing test is eligible only after two fresh healthy passes; its separate CLI route requires the suite name and exact approved SHA-256. This is regression testing against observed healthy behavior, not general website support or proof of correctness. [Qualification and CLI instructions](docs/guides/generated-seatpilot.md).
+
+The catalog suite remains the only qualified generated suite. The pricing follow-up passed its healthy price assertion but hit a network-inspection timeout; it was not promoted and no follow-up Gemini battle was run. [Qualification failure and credits](docs/evidence/seatpilot-pricing-qualification.md).
+
 ## Run a real battle from the CLI
 
 The default command starts a Gemini battle with a fresh Codex Builder and up to three repair attempts.
@@ -113,3 +117,5 @@ The Builder gets written requirements as well as failure evidence. The original 
 Run the offline suite with `.\.venv\Scripts\python.exe -m unittest discover -s tests -t .` on Windows, or `.venv/bin/python -m unittest discover -s tests -t .` on macOS or Linux. Mocked tests exercise runner behavior. Published live results link to separate run accounts.
 
 [Full documentation index](docs/README.md)
+
+[Contributing](CONTRIBUTING.md) · [MIT license](LICENSE)

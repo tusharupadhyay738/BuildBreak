@@ -1,5 +1,6 @@
 """SeatPilot's explicit backend-fault battle; shares Kane evidence validation."""
 import json
+import re
 from pathlib import Path
 import shutil
 import sys
@@ -71,10 +72,16 @@ def builder(codex,workspace,artifacts,failure,previous):
 
 
 def run_battle(root,breaker='gemini',builder_mode='codex',max_attempts=3,database=None,
-               artifacts_root=None,on_battle=None,on_event=None,verification_runner=None,show_browser=False,generated_hash=None,**unused):
+               artifacts_root=None,on_battle=None,on_event=None,verification_runner=None,show_browser=False,generated_hash=None,
+               generated_suite_name='seatpilot-attempt-02',**unused):
     if breaker not in {'gemini','scripted'} or builder_mode!='codex' or not 1<=max_attempts<=3:
         raise ValueError('SeatPilot supports Gemini/scripted Breakers and a Codex Builder, with up to three attempts.')
-    generated_suite = ROOT/'.testmuai/tests/generated/seatpilot-attempt-02'
+    if not re.fullmatch(r'seatpilot-[a-zA-Z0-9-]+', generated_suite_name):
+        raise ValueError('Select a named SeatPilot generated suite')
+    suites_root = ROOT/'.testmuai/tests/generated'
+    generated_suite = suites_root/generated_suite_name
+    if generated_hash is not None and generated_suite.resolve() != generated_suite.absolute():
+        raise ValueError('Generated suite must not redirect outside its archive')
     if generated_hash is not None:
         from .generated_suite import qualified_tests
         from .generated_battle import evaluate_suite_on_broken_app, run_generated_test
@@ -170,7 +177,7 @@ def run_battle(root,breaker='gemini',builder_mode='codex',max_attempts=3,databas
                 from .coverage_gap import save_gap
                 save_gap(private, healthy_quote, broken_quote, generated_hash,
                          verdict['test_results'][generated_test.name]['evidence_id'])
-                notify('coverage_gap','Qualified catalog test passed despite the changed quote. A follow-up requirements note is ready for Kane.','not_detected')
+                notify('coverage_gap','Qualified generated test passed despite the changed quote. A follow-up requirements note is ready for Kane.','not_detected')
                 return battle
             if verdict['overall_outcome'] != 'caught':
                 notify('stopped',verdict['reason'],'infrastructure_error')
@@ -230,3 +237,31 @@ def run_battle(root,breaker='gemini',builder_mode='codex',max_attempts=3,databas
         raise
     finally:
         if server: server.stop()
+
+
+def main():
+    import argparse
+    from .battle_runner import battle_exit_code
+    parser=argparse.ArgumentParser(description='Run the bundled SeatPilot with one qualified, locked Kane-generated test.')
+    parser.add_argument('--generated-suite',required=True)
+    parser.add_argument('--approved-sha256',required=True)
+    parser.add_argument('--breaker',choices=['gemini','scripted'],default='gemini')
+    parser.add_argument('--max-attempts',type=int,choices=[1,2,3],default=3)
+    parser.add_argument('--show-browser',action='store_true')
+    args=parser.parse_args()
+    try:
+        battle=run_battle(ROOT/'instance/seatpilot-cli-source'/uuid.uuid4().hex,
+            breaker=args.breaker,max_attempts=args.max_attempts,show_browser=args.show_browser,
+            generated_hash=args.approved_sha256,generated_suite_name=args.generated_suite,
+            on_battle=lambda value:print('Battle record:',value,flush=True))
+    except GeminiError as error:
+        print(str(error),file=sys.stderr)
+        return 1
+    with connect(ROOT/'instance/arena.sqlite3') as db:
+        state=db.execute('SELECT state FROM arena_sessions WHERE id=?',(battle,)).fetchone()[0]
+    print('Final state:',state,flush=True)
+    return battle_exit_code(state)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

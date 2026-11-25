@@ -64,9 +64,9 @@ class GeneratedBattleEvaluationTests(unittest.TestCase):
             self.runner.return_value = dict(dict(result="passed", evidence_id="fixture", test_hash=self.sha), **change)
             self.assertEqual(self.evaluate({"total": 10}, {"total": 9})["overall_outcome"], BattleResult.INFRASTRUCTURE_ERROR)
 
-    def exercise_dashboard_runner(self, broken_result):
+    def exercise_dashboard_runner(self, broken_result, suite_name='seatpilot-attempt-02'):
         from buildbreak.battle_runner import ROOT
-        suite = self.root / ".testmuai/tests/generated/seatpilot-attempt-02"
+        suite = self.root / '.testmuai/tests/generated' / suite_name
         suite.parent.mkdir(parents=True)
         self.suite.rename(suite)
         (self.root/adapter.TEST).write_bytes((ROOT/adapter.TEST).read_bytes())
@@ -96,7 +96,8 @@ class GeneratedBattleEvaluationTests(unittest.TestCase):
              patch.object(seatpilot_runner,"executable",return_value="offline"), \
              patch.object(seatpilot_runner,"builder", side_effect=offline_builder) as builder:
             battle = seatpilot_runner.run_battle(self.root/"source",breaker="scripted",database=db,
-                artifacts_root=self.root/"instance/battles",generated_hash=self.sha,verification_runner=offline_check)
+                artifacts_root=self.root/"instance/battles",generated_hash=self.sha,
+                generated_suite_name=suite_name,verification_runner=offline_check)
         with closing(sqlite3.connect(db)) as conn:
             state = conn.execute("select state from arena_sessions where id=?",(battle,)).fetchone()[0]
         return state, phases, builder.call_count, self.root/"instance/battles"/battle
@@ -124,8 +125,14 @@ class GeneratedBattleEvaluationTests(unittest.TestCase):
         self.assertEqual(qualified_tests(qualified), {self.name:self.sha})
 
     def test_real_probe_and_mocked_browser_catch_goes_through_repair(self):
-        state, phases, attempts, _ = self.exercise_dashboard_runner("verification_failed")
+        state, phases, attempts, _ = self.exercise_dashboard_runner("verification_failed",'seatpilot-gap-fixture')
         self.assertEqual((state, phases, attempts), ("completed", ["baseline","before","after"], 1))
+
+    def test_generated_suite_name_cannot_escape_the_archive(self):
+        for name in ('../other', 'seatpilot-../../other', '/absolute', 'other'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                seatpilot_runner.run_battle(self.root,breaker='scripted',generated_hash=self.sha,
+                                           generated_suite_name=name)
 
     def test_cli_only_receives_isolated_copy_with_bound_start_url(self):
         with patch("buildbreak.generated_battle._run_testmd") as kane:

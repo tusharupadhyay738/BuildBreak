@@ -7,7 +7,7 @@ import shutil
 import sys
 
 from . import seatpilot_adapter as adapter
-from .battle_runner import ROOT, Server, executable
+from .battle_runner import ROOT, Server, executable, classify_kane, validate_pack
 from .generated_battle import run_generated_test
 from .generated_suite import approve, digest, disposition, suite_file
 
@@ -30,7 +30,35 @@ def save_gap(private, healthy, broken, test_hash, evidence_id):
     (target/"requirements.md").write_text(text, encoding="utf-8")
 
 
-def check_followup(root, battle, filename, reviewed_hash, show_browser=False):
+def recheck_broken(directory, filename, reviewed_hash):
+    """Reuse sealed evidence, never the earlier classifier's receipt alone."""
+    artifacts = directory/'kane'
+    test = directory/'app/.testmuai/tests'/filename
+    if digest(test.read_bytes()) != reviewed_hash:
+        raise ValueError('Previously executed test differs from approved proposal')
+    saved = json.loads((directory/'receipt.json').read_text(encoding='utf-8'))
+    provenance = json.loads((artifacts/'artifact-provenance.json').read_text(encoding='utf-8'))
+    if saved['test_hash'] != reviewed_hash or provenance.get('timed_out') is not False:
+        raise ValueError('Saved broken run is incomplete or has a different test')
+    events = []
+    for line in (artifacts/'events.ndjson').read_text(encoding='utf-8').splitlines():
+        try:
+            value = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            events.append(value)
+    steps = len(re.findall(r'^##\s+Step\s+\d+\b', test.read_text(encoding='utf-8'), re.M))
+    result = classify_kane(events, provenance['process_exit_code'], steps)
+    if result != 'verification_failed':
+        raise ValueError('Saved run does not confirm an application failure')
+    variables = json.loads((directory/'kane-variables.json').read_text(encoding='utf-8'))
+    validate_pack(artifacts/'run.evidence', saved['evidence_id'], reviewed_hash,
+                  'failed', variables['start_url']['value'])
+    return dict(result=result, test_hash=reviewed_hash, evidence_id=saved['evidence_id'])
+
+
+def check_followup(root, battle, filename, reviewed_hash, show_browser=False, resume_broken=False):
     if not re.fullmatch(r"[0-9]{8}T[0-9]{6}-[0-9a-f]{8}", battle):
         raise ValueError("Invalid battle identifier")
     private = root/"instance/battles"/battle
@@ -50,9 +78,17 @@ def check_followup(root, battle, filename, reviewed_hash, show_browser=False):
         raise FileExistsError("Follow-up suite already exists")
     kane = executable("kane-cli")
     work = gap/"verification"
-    work.mkdir(exist_ok=False)
+    if resume_broken:
+        if any((work/phase).exists() for phase in ('healthy-1', 'healthy-2')):
+            raise FileExistsError('Healthy verification already started; inspect it instead of retrying')
+        checked = recheck_broken(work/'broken', filename, reviewed_hash)
+        with (work/'broken/rechecked-receipt.json').open('x', encoding='utf-8') as stream:
+            json.dump(checked, stream, indent=2)
+        print('broken saved evidence rechecked', checked['evidence_id'], flush=True)
+    else:
+        work.mkdir(exist_ok=False)
     healthy_runs = []
-    for phase in ("broken", "healthy-1", "healthy-2"):
+    for phase in (("healthy-1", "healthy-2") if resume_broken else ("broken", "healthy-1", "healthy-2")):
         directory = work/phase
         workspace = directory/"app"
         copied = adapter.snapshot(private/"workspace", workspace)
@@ -93,5 +129,7 @@ if __name__ == "__main__":
     parser.add_argument("filename")
     parser.add_argument("--approved-sha256", required=True)
     parser.add_argument("--show-browser", action="store_true")
+    parser.add_argument("--resume-broken", action="store_true",
+                        help="Revalidate saved broken-run evidence, then run two fresh healthy copies once")
     args = parser.parse_args()
-    sys.exit(0 if check_followup(ROOT,args.battle,args.filename,args.approved_sha256,args.show_browser) else 1)
+    sys.exit(0 if check_followup(ROOT,args.battle,args.filename,args.approved_sha256,args.show_browser,args.resume_broken) else 1)
