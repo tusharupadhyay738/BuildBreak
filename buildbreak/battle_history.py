@@ -84,12 +84,13 @@ def decorate(item, detail):
 
 def summarize(sessions):
     # Do not count older records without a confirmed direct check as suite measurements.
+    real_sessions = [session for session in sessions if not session.get('isSample')]
     counts = {key: 0 for key in OUTCOME_LABELS}
-    for session in sessions:
+    for session in real_sessions:
         detail = session.get('drill')
         if detail and not detail.get('experiment') and detail['independently_validated'] and detail['outcome'] in counts:
             counts[detail['outcome']] += 1
     counts['scored'] = sum(counts.values())
     counts['caught'] = counts['caught_and_repaired'] + counts['caught_needs_human']
-    counts['excluded'] = len(sessions) - counts['scored']
+    counts['excluded'] = len(real_sessions) - counts['scored']
     return counts

@@ -110,6 +110,13 @@ class HistoryTests(unittest.TestCase):
                             session('caught_and_repaired', False), {'drill': None}])
         self.assertEqual((scores['scored'], scores['caught'], scores['caught_and_repaired'], scores['excluded']), (3, 2, 1, 3))
 
+    def test_sample_replay_is_never_counted_as_a_real_drill(self):
+        sample = {'isSample': True, 'drill': {'outcome': 'caught_and_repaired', 'independently_validated': True}}
+
+        scores = summarize([sample])
+
+        self.assertEqual((scores['scored'], scores['caught'], scores['excluded']), (0, 0, 0))
+
 
 if __name__ == '__main__':
     unittest.main()

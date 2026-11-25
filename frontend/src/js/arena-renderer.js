@@ -63,29 +63,43 @@ function renderWorkspaceBanner(payload, activePreviewKey) {
         </p>
       </div>
 
-      <div class="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0">
-        <span class="text-xs font-medium text-slate-500 whitespace-nowrap">Preview state:</span>
-        <div role="group" aria-label="Console preview states" class="inline-flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-md border border-slate-200">
-          ${previewOptions
-            .map((opt) => {
-              const isActive = activePreviewKey === opt.key;
-              return `
-                <button
-                  type="button"
-                  data-preview-state="${escapeHtml(opt.key)}"
-                  aria-pressed="${isActive ? 'true' : 'false'}"
-                  class="px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 ${
-                    isActive
-                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }"
-                >
-                  ${escapeHtml(opt.label)}
-                </button>
-              `;
-            })
-            .join('')}
-        </div>
+      <div class="shrink-0">
+        <details class="relative">
+          <summary class="cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900">Advanced</summary>
+          <div class="absolute right-0 top-full z-40 mt-2 w-72 rounded-md border border-slate-200 bg-white p-3 shadow-lg">
+            <div class="space-y-2">
+              <span class="text-xs font-medium text-slate-500">Preview state:</span>
+              <div role="group" aria-label="Console preview states" class="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-md border border-slate-200">
+                ${previewOptions
+                  .map((opt) => {
+                    const isActive = activePreviewKey === opt.key;
+                    return `
+                      <button
+                        type="button"
+                        data-preview-state="${escapeHtml(opt.key)}"
+                        aria-pressed="${isActive ? 'true' : 'false'}"
+                        class="px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 ${
+                          isActive
+                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }"
+                      >
+                        ${escapeHtml(opt.label)}
+                      </button>
+                    `;
+                  })
+                  .join('')}
+              </div>
+              <button
+                id="export-json-btn"
+                type="button"
+                class="w-full rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
+              >
+                Export JSON
+              </button>
+            </div>
+          </div>
+        </details>
       </div>
     </section>
   `;
@@ -172,7 +186,7 @@ function renderEmptyState() {
             data-action="reload-payload"
             class="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
           >
-            Reload from Jinja payload
+            Reload recorded data
           </button>
         </div>
       </div>
@@ -1018,6 +1032,8 @@ export function renderBattleFilterBar({ payload, outcomeFilter, counts, filtered
   const activeTab = viewTabs.find((t) => t.key === outcomeFilter);
   const summaryText = !isReady
     ? 'Battle history filters unavailable in current state'
+    : payload.isSample
+      ? 'SAMPLE replay · not included in real battle counts'
     : activeTab
       ? `Showing ${filteredCount} of ${counts.all} battles (${activeTab.label})`
       : `Showing ${filteredCount} of ${counts.all} battles`;
@@ -1072,7 +1088,21 @@ function renderProjectSetup() {
       <button id="project-import" type="button" class="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Import ZIP</button>
     </div>
     <p id="project-status" role="status" class="text-sm text-slate-600">Checking local setup...</p>
-    <p id="project-prerequisites" class="text-xs text-slate-500"></p>
+    <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2" aria-label="Setup">
+      <h3 class="text-sm font-semibold text-slate-900">Setup</h3>
+      <p class="text-sm text-slate-700">Ready to replay. Connect Kane CLI, Codex and a Gemini key to run live.</p>
+      <details class="pt-1">
+        <summary class="cursor-pointer text-xs font-medium text-slate-600 underline underline-offset-2">Show setup details</summary>
+        <dl class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div class="flex justify-between gap-3"><dt>Local execution</dt><dd id="setup-local-execution">Checking</dd></div>
+          <div class="flex justify-between gap-3"><dt>Chrome</dt><dd id="setup-chrome">Checking</dd></div>
+          <div class="flex justify-between gap-3"><dt>Kane CLI</dt><dd id="setup-kane">Checking</dd></div>
+          <div class="flex justify-between gap-3"><dt>Codex</dt><dd id="setup-codex">Checking</dd></div>
+          <div class="flex justify-between gap-3"><dt>Gemini key</dt><dd id="setup-gemini">Checking</dd></div>
+          <div class="flex justify-between gap-3"><dt>SeatPilot Node/npm</dt><dd id="setup-node">Checking</dd></div>
+        </dl>
+      </details>
+    </div>
     <details class="rounded border border-slate-200 p-3">
       <summary class="cursor-pointer text-sm font-medium">Review the acceptance test before approval</summary>
       <pre id="project-test" class="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-slate-700"></pre>
@@ -1178,7 +1208,8 @@ export function renderArenaDashboard(state) {
     wipePercent,
   } = state;
 
-  const parts = [renderWorkspaceBanner(payload, activePreviewKey), ...(activePreviewKey === 'archive' ? [renderProjectSetup()] : [])];
+  const parts = [renderWorkspaceBanner(payload, activePreviewKey),
+    ...(activePreviewKey === 'archive' || payload.autoSample ? [renderProjectSetup()] : [])];
 
   if (payload.status === 'loading') {
     parts.push(renderLoadingState());

@@ -2,6 +2,7 @@
 from contextlib import closing
 from pathlib import Path
 import tempfile
+import re
 import sqlite3
 import unittest
 
@@ -32,11 +33,13 @@ class ConsoleTests(unittest.TestCase):
             record_run(self.database, 'fixture', phase, int(phase == 'after'),
                        dict(result=result, evidence_id='synthetic', pack_hash='fixture', test_hash='fixture', duration=0))
 
-    def test_empty_archive_never_silently_substitutes_samples(self):
+    def test_empty_archive_offers_sample_replay_without_adding_sample_records(self):
         response = self.client.get('/arena/data')
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual((data['status'], data['isSample'], data['battles']), ('empty', False, []))
+        self.assertEqual(data['notice'], 'Showing a SAMPLE replay of recorded battles. Your own battles will appear here.')
+        self.assertIn(data['notice'].encode(), self.client.get('/arena').data)
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
         self.assertEqual(self.client.post('/arena/data').status_code, 405)
 
@@ -45,6 +48,7 @@ class ConsoleTests(unittest.TestCase):
         data = self.client.get('/arena/data').get_json()
         battle = data['battles'][0]
         self.assertEqual((data['isSample'], battle['isSample']), (False, False))
+        self.assertEqual((data['status'], len(data['battles'])), ('ready', 1))
         self.assertEqual((battle['id'], battle['breaker'], battle['faultFamily']), ('fixture', 'Gemini', 'pricing'))
         self.assertEqual(battle['comparisons'], [])
         self.assertEqual(battle['screenshots']['failure']['status'], 'missing')
@@ -65,10 +69,19 @@ class ConsoleTests(unittest.TestCase):
             db.execute('UPDATE arena_sessions SET mode=?', ('</script><script>alert(1)</script>',))
             db.commit()
         page = self.client.get('/arena').data
-        for control in (b'export-json-btn', b'footer-sound-toggle', b'shortcuts-modal', b'screenshot-modal', b'schema-modal'):
+        for control in (b'footer-sound-toggle', b'shortcuts-modal', b'screenshot-modal',
+                        b'schema-modal', b'Data format (for developers)'):
             self.assertIn(control, page)
         self.assertIn(b'\\u003c/script\\u003e', page)
         self.assertNotIn(b'</script><script>alert(1)</script>', page)
+        bundle = re.search(rb'<script type="module" crossorigin src="([^"]+)"', page)
+        self.assertIsNotNone(bundle)
+        with self.client.get(bundle.group(1).decode()) as script_response:
+            javascript = script_response.get_data()
+        for control in (b'export-json-btn', b'Advanced', b'Preview state:', b'Reload recorded data'):
+            self.assertIn(control, javascript)
+        self.assertNotIn(b'Reload from Jinja payload', javascript)
+        self.assertNotIn(b'Jinja / JSON integration contract', page)
 
 
 if __name__ == '__main__':

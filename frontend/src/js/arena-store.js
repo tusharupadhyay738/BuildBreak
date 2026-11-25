@@ -10,13 +10,28 @@
 
 import { SAMPLE_HISTORICAL_PAYLOAD, STATE_PREVIEWS } from '../data/sample-payload.js';
 
+export const EMPTY_ARCHIVE_SAMPLE_NOTICE =
+  'Showing a SAMPLE replay of recorded battles. Your own battles will appear here.';
+
+export function applySampleReplay(payload) {
+  if (payload?.mode !== 'live_archive' || payload.isSample === true ||
+      payload.status !== 'empty' || (Array.isArray(payload.battles) && payload.battles.length > 0)) {
+    return payload;
+  }
+  const sample = getPreviewPayload('historical_demo');
+  sample.notice = payload.notice || EMPTY_ARCHIVE_SAMPLE_NOTICE;
+  sample.dataSourceLabel = 'SAMPLE replay of recorded battles';
+  sample.autoSample = true;
+  return sample;
+}
+
 export function readInjectedPayload() {
   const scriptEl = document.getElementById('arena-payload');
   if (scriptEl && scriptEl.textContent && scriptEl.textContent.trim().length > 0) {
     try {
       const parsed = JSON.parse(scriptEl.textContent);
       if (parsed && typeof parsed === 'object') {
-        return parsed;
+        return applySampleReplay(parsed);
       }
     } catch (err) {
       return {
@@ -40,10 +55,18 @@ export function readInjectedPayload() {
   }
 
   if (typeof window !== 'undefined' && window.__ARENA_PAYLOAD__) {
-    return window.__ARENA_PAYLOAD__;
+    return applySampleReplay(window.__ARENA_PAYLOAD__);
   }
 
-  return {mode:'live_archive',isSample:false,status:'empty',dataSourceLabel:'Local SQLite archive',notice:'No recorded battles are available.',battles:[],activeBattleId:null};
+  return applySampleReplay({
+    mode: 'live_archive',
+    isSample: false,
+    status: 'empty',
+    dataSourceLabel: 'Local SQLite archive',
+    notice: EMPTY_ARCHIVE_SAMPLE_NOTICE,
+    battles: [],
+    activeBattleId: null,
+  });
 }
 
 export function getPreviewPayload(previewKey) {
@@ -69,7 +92,7 @@ export function normalizeOutcomeKey(outcome) {
 }
 
 export function countBattlesByView(battles) {
-  const list = Array.isArray(battles) ? battles : [];
+  const list = Array.isArray(battles) ? battles.filter((battle) => battle.isSample !== true) : [];
   const counts = {
     all: list.length,
     success: 0,
