@@ -117,6 +117,6 @@ def console_payload(sessions, artifacts, selected, format_time):
                 status='ready' if battles else 'empty', dataSourceLabel='Local SQLite recorded archive',
                 notice=('Genuine local battle records. Infrastructure problems, escapes and repair results remain distinct. '
                         'Only the ten most recent records are shown.' if battles else
-                        'Showing a SAMPLE replay of recorded battles. Your own battles will appear here.'),
+                        'Showing a fictional UI demo (SAMPLE), not recorded Kane evidence. Your own battles will appear here.'),
                 activeBattleId=selected if any(b['id'] == selected for b in battles) else
                                (battles[0]['id'] if battles else None), battles=battles, error=None)

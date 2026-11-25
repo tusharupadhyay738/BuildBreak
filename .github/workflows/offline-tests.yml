@@ -11,11 +11,15 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      ARENA_REQUIRE_BROWSER_TESTS: '1'
+      ARENA_TEST_BROWSER: chromium
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -r requirements.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m playwright install --with-deps chromium
       - run: mkdir -p instance
       - run: python -m unittest discover -s tests -t .

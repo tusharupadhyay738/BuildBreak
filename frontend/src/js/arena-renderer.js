@@ -977,7 +977,7 @@ function renderVerificationSection(battle) {
           </div>
 
           <div class="space-y-1.5">
-            <div class="text-xs font-medium text-slate-700">${battle.isSample ? 'Recorded stdout excerpt (SAMPLE)' : 'Sanitized recorded event summary'}</div>
+            <div class="text-xs font-medium text-slate-700">${battle.isSample ? 'Illustrative stdout excerpt (SAMPLE)' : 'Sanitized recorded event summary'}</div>
             <pre class="font-mono text-xs bg-slate-900 text-slate-100 p-4 rounded-md overflow-x-auto leading-relaxed">${escapeHtml(v.stdoutExcerpt || 'No stdout recorded.')}</pre>
           </div>
         </div>

@@ -102,7 +102,7 @@ python3 -m venv .venv
 .venv/bin/python app.py
 ```
 
-Open the [Arena dashboard](http://127.0.0.1:5000/arena) or try two shirts, one sticker pack and SAVE10 in [BreakShop](http://127.0.0.1:5000). Use fictional checkout details. A fresh clone starts with empty battle history. To see an example before running agents, open the [recorded battle](docs/evidence/dashboard-project-battle.md) or the [labeled sample report](docs/evidence/sample-report.md).
+Open the [Arena dashboard](http://127.0.0.1:5000/arena) or try two shirts, one sticker pack and SAVE10 in [BreakShop](http://127.0.0.1:5000). Use fictional checkout details. A fresh clone starts with empty battle history; the dashboard shows a clearly labeled fictional UI demo until recorded results are available. That demo is not Kane evidence and does not count toward battle totals. For genuine historical results, open the [recorded battle](docs/evidence/dashboard-project-battle.md) or the [labeled sample report](docs/evidence/sample-report.md).
 
 ## Launch through the dashboard
 

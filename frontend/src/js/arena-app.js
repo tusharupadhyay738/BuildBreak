@@ -708,6 +708,7 @@ export function initArenaDashboard() {
       if (!response.ok) return;
       const payload = await response.json();
       state.payload = payload;
+      pendingArchivePayload = null;
       state.activePreviewKey = 'archive';
       state.selectedBattleId = id;
       state.selectedStageIndex = 0;
@@ -940,14 +941,25 @@ export function initArenaDashboard() {
   });
   loadProject('builtin');
 
+  // Keep the latest update until the current interaction finishes. The backend
+  // poller deduplicates payloads, so a deferred event will not be sent again.
+  let pendingArchivePayload = null;
+  function flushPendingArchive() {
+    if (!pendingArchivePayload) return;
+    if (state.activePreviewKey !== 'archive' && !state.payload.autoSample) return;
+    if (document.activeElement?.id === 'battle-search' || document.activeElement?.closest('#project-setup-panel') || state.isReplayingStages || isDraggingWipe) return;
+    state.payload = applySampleReplay(pendingArchivePayload);
+    pendingArchivePayload = null;
+    state.activePreviewKey = state.payload.autoSample ? 'historical_demo' : 'archive';
+    render();
+  }
   document.addEventListener('arena:archive-update', (event) => {
     const script = document.getElementById('arena-payload');
     if (script) script.textContent = JSON.stringify(event.detail);
-    if (state.activePreviewKey !== 'archive' && !state.payload.autoSample) return;
-    if (document.activeElement?.id === 'battle-search' || document.activeElement?.closest('#project-setup-panel') || state.isReplayingStages || isDraggingWipe) return;
-    state.payload = applySampleReplay(event.detail);
-    state.activePreviewKey = state.payload.autoSample ? 'historical_demo' : 'archive';
-    render();
+    pendingArchivePayload = event.detail;
+    flushPendingArchive();
   });
+  const archiveFlushInterval = setInterval(flushPendingArchive, 250);
+  window.addEventListener('pagehide', () => clearInterval(archiveFlushInterval));
   render();
 }

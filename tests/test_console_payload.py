@@ -38,7 +38,7 @@ class ConsoleTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertEqual((data['status'], data['isSample'], data['battles']), ('empty', False, []))
-        self.assertEqual(data['notice'], 'Showing a SAMPLE replay of recorded battles. Your own battles will appear here.')
+        self.assertEqual(data['notice'], 'Showing a fictional UI demo (SAMPLE), not recorded Kane evidence. Your own battles will appear here.')
         self.assertIn(data['notice'].encode(), self.client.get('/arena').data)
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
         self.assertEqual(self.client.post('/arena/data').status_code, 405)

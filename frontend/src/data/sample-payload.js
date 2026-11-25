@@ -23,9 +23,9 @@ export const SAMPLE_HISTORICAL_PAYLOAD = {
   mode: 'historical_demo',
   isSample: true,
   status: 'ready',
-  dataSourceLabel: 'SAMPLE historical dataset (Flask + SQLite preview)',
+  dataSourceLabel: 'Fictional UI demo (SAMPLE)',
   notice:
-    'Historical Demo (SAMPLE): Read-only reference dataset for first-time visitors. Connect Flask + SQLite to inspect recorded battles from your local database.',
+    'Fictional UI demo (SAMPLE), not recorded Kane evidence. Connect Flask + SQLite to inspect your own recorded battles.',
   activeBattleId: 'SAMPLE-BTL-001',
   battles: [
     {
