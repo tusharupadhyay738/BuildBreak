@@ -2,6 +2,7 @@
 from contextlib import closing
 from pathlib import Path
 import tempfile
+import re
 import sqlite3
 import unittest
 
@@ -68,10 +69,19 @@ class ConsoleTests(unittest.TestCase):
             db.execute('UPDATE arena_sessions SET mode=?', ('</script><script>alert(1)</script>',))
             db.commit()
         page = self.client.get('/arena').data
-        for control in (b'export-json-btn', b'footer-sound-toggle', b'shortcuts-modal', b'screenshot-modal', b'schema-modal'):
+        for control in (b'footer-sound-toggle', b'shortcuts-modal', b'screenshot-modal',
+                        b'schema-modal', b'Data format (for developers)'):
             self.assertIn(control, page)
         self.assertIn(b'\\u003c/script\\u003e', page)
         self.assertNotIn(b'</script><script>alert(1)</script>', page)
+        bundle = re.search(rb'<script type="module" crossorigin src="([^"]+)"', page)
+        self.assertIsNotNone(bundle)
+        with self.client.get(bundle.group(1).decode()) as script_response:
+            javascript = script_response.get_data()
+        for control in (b'export-json-btn', b'Advanced', b'Preview state:', b'Reload recorded data'):
+            self.assertIn(control, javascript)
+        self.assertNotIn(b'Reload from Jinja payload', javascript)
+        self.assertNotIn(b'Jinja / JSON integration contract', page)
 
 
 if __name__ == '__main__':

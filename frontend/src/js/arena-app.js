@@ -23,7 +23,6 @@ export function initArenaDashboard() {
   const filterBarEl = document.getElementById('battle-filter-bar');
   const mainEl = document.getElementById('arena-main');
   const footerSourceEl = document.getElementById('footer-data-source');
-  const exportBtn = document.getElementById('export-json-btn');
   const toastEl = document.getElementById('arena-toast');
   const soundToggleBtn = document.getElementById('footer-sound-toggle');
   const soundIconOff = document.getElementById('footer-sound-icon-off');
@@ -69,9 +68,7 @@ export function initArenaDashboard() {
     wipePercent: 50,
   };
 
-  state.activePreviewKey = state.payload.isSample && !state.payload.autoSample
-    ? 'historical_demo'
-    : 'archive';
+  state.activePreviewKey = state.payload.isSample ? 'historical_demo' : 'archive';
   state.selectedBattleId = state.payload.activeBattleId || null;
 
   let replayTimerId = null;
@@ -527,24 +524,23 @@ export function initArenaDashboard() {
     }
   });
 
-  // Top bar read-only Export JSON action
-  if (exportBtn) {
-    exportBtn.addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify(state.payload, null, 2)], {
-        type: 'application/json',
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `buildbreak-arena-${state.activePreviewKey}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      sound.play('copy');
-      showToast('Exported JSON snapshot');
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest('#export-json-btn')) return;
+    const blob = new Blob([JSON.stringify(state.payload, null, 2)], {
+      type: 'application/json',
     });
-  }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `buildbreak-arena-${state.activePreviewKey}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    sound.play('copy');
+    showToast('Exported JSON snapshot');
+  });
 
   // Footer sound toggle (default muted)
   if (soundToggleBtn) {
@@ -882,7 +878,12 @@ export function initArenaDashboard() {
       projectText('project-test', data.project.compatible ? data.test_text : 'No test approved. A project-specific adapter is required.');
       projectText('project-test-hash', data.project.compatible ? `SHA-256: ${data.test_sha256}` : '');
       const p = data.prerequisites;
-      projectText('project-prerequisites', `Local execution: ${data.enabled ? 'enabled' : 'disabled - set ARENA_ENABLE_LIVE_KANE=1 and restart'} | Chrome: ${p.chrome ? 'found' : 'missing'} | Kane: ${p.kane ? 'found' : 'missing'} | Codex: ${p.codex ? 'found' : 'missing'} ${p.node === undefined ? '' : ` | SeatPilot Node/npm: ${p.node ? 'found' : 'missing'}`} | Gemini environment: ${p.gemini ? 'configured' : 'not configured in the Arena server - restart it from your configured terminal'}`);
+      projectText('setup-local-execution', data.enabled ? 'Enabled' : 'Disabled');
+      projectText('setup-chrome', p.chrome ? 'Found' : 'Missing');
+      projectText('setup-kane', p.kane ? 'Found' : 'Missing');
+      projectText('setup-codex', p.codex ? 'Found' : 'Missing');
+      projectText('setup-gemini', p.gemini ? 'Configured' : 'Not configured');
+      projectText('setup-node', p.node === undefined ? 'Not required' : p.node ? 'Found' : 'Missing');
     } catch (error) {
       if (version === selectionVersion) projectText('project-status', error.message);
     }
@@ -942,9 +943,10 @@ export function initArenaDashboard() {
   document.addEventListener('arena:archive-update', (event) => {
     const script = document.getElementById('arena-payload');
     if (script) script.textContent = JSON.stringify(event.detail);
-    if (state.activePreviewKey !== 'archive') return;
+    if (state.activePreviewKey !== 'archive' && !state.payload.autoSample) return;
     if (document.activeElement?.id === 'battle-search' || document.activeElement?.closest('#project-setup-panel') || state.isReplayingStages || isDraggingWipe) return;
     state.payload = applySampleReplay(event.detail);
+    state.activePreviewKey = state.payload.autoSample ? 'historical_demo' : 'archive';
     render();
   });
   render();

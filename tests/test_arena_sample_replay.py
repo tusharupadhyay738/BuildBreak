@@ -107,3 +107,25 @@ class ArenaSampleReplayTests(unittest.TestCase):
         )).to_have_count(0)
         expect(self.page.locator('#history')).to_contain_text('fixture-real')
         expect(self.page.get_by_text('Showing 1 of 1 battles (All)', exact=True)).to_be_visible()
+
+    def test_setup_and_advanced_controls_remain_available(self):
+        self.page.goto('http://localhost/arena')
+
+        expect(self.page.get_by_text(
+            'Ready to replay. Connect Kane CLI, Codex and a Gemini key to run live.',
+            exact=True,
+        )).to_be_visible()
+        expect(self.page.get_by_text('Local execution', exact=True)).to_be_hidden()
+        expect(self.page.get_by_text('Preview state:', exact=True)).to_be_hidden()
+        expect(self.page.get_by_role('button', name='Export JSON', exact=True)).to_be_hidden()
+
+        self.page.get_by_text('Show setup details', exact=True).click()
+        expect(self.page.get_by_text('Local execution', exact=True)).to_be_visible()
+        self.page.get_by_text('Advanced', exact=True).click()
+        expect(self.page.get_by_text('Preview state:', exact=True)).to_be_visible()
+        expect(self.page.get_by_role('button', name='Export JSON', exact=True)).to_be_visible()
+        with self.page.expect_download() as download_info:
+            self.page.get_by_role('button', name='Export JSON', exact=True).click()
+        self.assertEqual(download_info.value.suggested_filename, 'buildbreak-arena-historical_demo.json')
+        self.page.get_by_role('button', name='Data format (for developers)', exact=True).click()
+        expect(self.page.get_by_role('heading', name='Data format (for developers)', exact=True)).to_be_visible()
