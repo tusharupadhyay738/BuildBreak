@@ -16,7 +16,11 @@ marker = '<script id="arena-payload" type="application/json"></script>'
 assert html.count(marker) == 1
 html = html.replace(marker, '<script id="arena-payload" type="application/json">'
                     '{% endraw %}{{ console_payload | tojson }}{% raw %}</script>')
+# The suite summary also appears when the interactive battle archive is empty.
+main_marker = '<main id="arena-main"'
+assert html.count(main_marker) == 1
+html = html.replace(main_marker, '{% endraw %}{% include "generated_suites.html" %}{% raw %}' + main_marker)
 # Keep the original integration-contract example literal, including its Jinja text.
 html = '{% raw %}' + html + '{% endraw %}\n<noscript>{% include "arena_fallback.html" %}</noscript>'
 (ROOT / 'templates/arena.html').write_text(html, encoding='utf-8')
-print('Original UI exported to Flask; only the data script is server-injected.')
+print('Arena UI exported with archive data and the regression suite summary.')

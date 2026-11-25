@@ -67,6 +67,8 @@ Open the [Arena dashboard](http://127.0.0.1:5000/arena) or try two shirts, one s
 
 SeatPilot is a second application with a different question to test. When someone reserves tickets, do the saved booking and remaining inventory agree? The adapter pairs the AI Studio React design with a local Flask API and a separate protected booking test. It requires Node.js and npm to build the frontend. The image shows the running website. Live Kane repair evidence published here covers BreakShop. [Supported imports and adapter limits](docs/guides/self-service.md).
 
+Choose **SeatPilot generated suite** to run the approved catalog filter and reset test. It passed twice on fresh healthy copies. Arena compares the discount quote independently so a passing catalog check can reveal a gap in pricing coverage. [Generated-suite guide](docs/guides/generated-seatpilot.md) · [Recorded $13.60 pricing escape](docs/evidence/seatpilot-generated-escape.md).
+
 ## Run a real battle from the CLI
 
 The default command starts a Gemini battle with a fresh Codex Builder and up to three repair attempts.

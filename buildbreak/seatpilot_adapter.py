@@ -20,12 +20,32 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def export_sha(path):
+    """Normalize reviewed text exports only; runtime/test locks stay byte-exact."""
+    path = Path(path)
+    data = path.read_bytes()
+    if path.suffix in {'.ts', '.tsx', '.css', '.html', '.json'}:
+        data = data.replace(b'\r\n', b'\n')
+    return hashlib.sha256(data).hexdigest()
+
+
+def export_hashes(path):
+    path = Path(path)
+    data = path.read_bytes()
+    candidates = {data}
+    if path.suffix in {'.ts', '.tsx', '.css', '.html', '.json'}:
+        lf_data = data.replace(b'\r\n', b'\n')
+        candidates.add(lf_data)
+        candidates.add(lf_data.replace(b'\n', b'\r\n'))
+    return {hashlib.sha256(candidate).hexdigest() for candidate in candidates}
+
+
 def matches_export(folder):
     try:
         for version in ('original', 'adapted', 'adapted-v2', 'adapted-v1'):
             manifest = json.loads((EXAMPLE / (version+'-source-sha256.json')).read_text(encoding='utf-8'))
             if all((folder/name).is_file() and not (folder/name).is_symlink()
-                   and sha(folder/name) == expected for name, expected in manifest.items()):
+                   and expected in export_hashes(folder/name) for name, expected in manifest.items()):
                 return True
         return False
     except (OSError, ValueError):
@@ -159,7 +179,17 @@ def mutation(workspace, proposal):
     return candidate
 
 
-def validate_fault(workspace, artifacts, python, manifest, proposal, server_class):
+def observe_quote(url):
+    from .differential_check import DifferentialProbeError, probe_http_endpoint
+    quote = probe_http_endpoint(url, '/api/quote', 'POST',
+        {'eventId': 'evt-nocturne-symphony', 'quantity': 2, 'discountCode': 'EARLY15'})['json']
+    fields = ('subtotal', 'discountAmount', 'total')
+    if not isinstance(quote, dict) or any(type(quote.get(key)) not in (int, float) for key in fields):
+        raise DifferentialProbeError('Quote probe returned an unexpected schema')
+    return {key: quote[key] for key in fields}
+
+
+def validate_fault(workspace, artifacts, python, manifest, proposal, server_class, healthy_quote=None):
     protected(workspace,manifest)
     candidate=mutation(workspace,proposal)
     artifacts.mkdir(parents=True,exist_ok=False)
@@ -174,10 +204,14 @@ def validate_fault(workspace, artifacts, python, manifest, proposal, server_clas
     server.ready_marker=b'SeatPilot'
     try:
         server.start()
+        if healthy_quote is not None:
+            from .differential_check import compare_differential_observations
+            different, reason = compare_differential_observations(healthy_quote, observe_quote(server.url))
+            if not different:
+                raise InvalidFault(reason)
     finally:
         server.stop()
-    observed=direct_check(copy,artifacts/'direct',python)
     protected(copy,manifest,allow_app=True)
-    if observed['passed']:
+    if healthy_quote is None and direct_check(copy,artifacts/'direct',python)['passed']:
         raise InvalidFault('The independent SeatPilot saved-booking invariant did not fail.')
     return candidate

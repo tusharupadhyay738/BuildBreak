@@ -56,11 +56,12 @@ def prepare_source(folder, record, destination):
 
 
 class BattleSession(kane_live.LiveKaneSession):
-    def __init__(self, source, database, artifacts, breaker, show_browser, adapter_name='breakshop'):
+    def __init__(self, source, database, artifacts, breaker, show_browser, adapter_name='breakshop', generated_hash=None):
         super().__init__('http://127.0.0.1:5000', show_browser=show_browser)
         self.source, self.database, self.artifacts = source, database, artifacts
         self.breaker, self.phase = breaker, None
         self.adapter_name = adapter_name
+        self.generated_hash = generated_hash
         if adapter_name == 'seatpilot':
             self.test_path = '.testmuai/tests/SeatPilotBooking_test.md'
 
@@ -77,6 +78,8 @@ class BattleSession(kane_live.LiveKaneSession):
         from .live_browser import LiveBrowser
         from .evidence_images import screenshot_for
         self.phase, attempt = artifacts.name.rsplit('-', 1)
+        if self.generated_hash:
+            self.test_path = Path(options['test_path']).name
         self.target_url = url
         self.current_step, self.steps = 0, []
         self.latest_screenshot, self.screenshot = None, None
@@ -86,10 +89,15 @@ class BattleSession(kane_live.LiveKaneSession):
         self.browser = LiveBrowser(directory, url, self.show_browser, self.browser_state)
         try:
             self.browser.start()
-            result = run_kane(workspace, artifacts, url, name, kane,
-                              show_browser=self.show_browser, on_line=self.handle_line,
-                              cdp_endpoint=self.browser.endpoint,
-                              **({'test_path': Path('.testmuai/tests/SeatPilotBooking_test.md')} if self.adapter_name == 'seatpilot' else {}))
+            if self.generated_hash:
+                from .generated_battle import run_generated_test
+                result = run_generated_test(workspace, artifacts, url, name, kane, options['test_path'],
+                    self.generated_hash, self.show_browser, self.handle_line, self.browser.endpoint)
+            else:
+                result = run_kane(workspace, artifacts, url, name, kane,
+                                  show_browser=self.show_browser, on_line=self.handle_line,
+                                  cdp_endpoint=self.browser.endpoint,
+                                  **({'test_path': Path('.testmuai/tests/SeatPilotBooking_test.md')} if self.adapter_name == 'seatpilot' else {}))
         finally:
             self.browser.close()
         self.screenshot = screenshot_for(self.artifacts, self.id,
@@ -108,7 +116,8 @@ class BattleSession(kane_live.LiveKaneSession):
         try:
             battle = run_battle(root=self.source, breaker=self.breaker, builder='codex', max_attempts=3,
                 database=self.database, artifacts_root=self.artifacts,
-                on_battle=self.bind, on_event=self.progress, verification_runner=self.verify)
+                on_battle=self.bind, on_event=self.progress, verification_runner=self.verify,
+                **({'generated_hash': self.generated_hash} if self.generated_hash else {}))
             with sqlite3.connect(self.database) as connection:
                 state = connection.execute('SELECT state FROM arena_sessions WHERE id=?', (battle,)).fetchone()[0]
             self.result = state
@@ -127,11 +136,11 @@ class BattleSession(kane_live.LiveKaneSession):
             self.broadcast(dict(type='status', status=self.status, result=self.result, message=self.error_message))
 
 
-def start_battle(source, database, artifacts, breaker, show_browser, adapter_name='breakshop'):
+def start_battle(source, database, artifacts, breaker, show_browser, adapter_name='breakshop', generated_hash=None):
     with kane_live._SESSION_LOCK:
         if kane_live._ACTIVE_SESSION and kane_live._ACTIVE_SESSION.status == 'running':
             raise ValueError('A run is active. Wait for it to finish.')
-        session = BattleSession(source, database, artifacts, breaker, show_browser, adapter_name)
+        session = BattleSession(source, database, artifacts, breaker, show_browser, adapter_name, generated_hash)
         kane_live._ACTIVE_SESSION = session
         session.thread = threading.Thread(target=session.run, daemon=True)
         session.thread.start()
@@ -155,14 +164,24 @@ def register_project_routes(app, require_local_viewer):
         if project_id == 'builtin':
             record = dict(id='builtin', framework='Flask', adapter='breakshop', compatible=True,
                           reason='Built-in BreakShop demo with a validated adapter.')
-        elif project_id == 'seatpilot':
+        elif project_id in {'seatpilot','seatpilot-generated'}:
             record = dict(id='seatpilot', framework='SeatPilot', adapter='seatpilot', compatible=True,
                           reason='Book two concert tickets, apply EARLY15 and reload the saved confirmation.')
         else:
             _, record = load_project(app.config['ARENA_PROJECTS'], project_id)
         test_path = (Path('.testmuai/tests/SeatPilotBooking_test.md') if record.get('adapter')=='seatpilot'
                      else Path(kane_live.TEST_PATH))
+        if project_id == 'seatpilot-generated':
+            from .generated_suite import qualified_tests
+            suite = ROOT / '.testmuai/tests/generated/seatpilot-attempt-02'
+            eligible = qualified_tests(suite) if (suite/'manifest.json').is_file() else {}
+            if len(eligible) != 1:
+                raise ValueError('SeatPilot generated suite needs one approved test with two healthy passes.')
+            test_path = suite / next(iter(eligible))
+            record.update(id=project_id, reason='Use the qualified Kane-generated regression on the isolated SeatPilot app.')
         test = (ROOT / test_path).read_bytes()
+        if project_id == 'seatpilot-generated' and hashlib.sha256(test).hexdigest() != eligible[test_path.name]:
+            raise ValueError('Generated definition changed during preflight.')
         requirements = prerequisites()
         if record.get('adapter')=='seatpilot':
             requirements['node'] = bool(shutil.which('node')) and bool(shutil.which('npm.cmd') or shutil.which('npm'))
@@ -188,8 +207,9 @@ def register_project_routes(app, require_local_viewer):
         require_local_viewer()
         try:
             return app.json.response(preflight(project_id))
-        except (ValueError, OSError):
-            return app.json.response(error='Project unavailable or changed; import it again.'), 400
+        except (ValueError, OSError, KeyError, TypeError):
+            msg = 'SeatPilot generated suite unavailable. Check the approval and two healthy results.' if project_id == 'seatpilot-generated' else 'Project unavailable or changed; import it again.'
+            return app.json.response(error=msg), 400
 
     @app.post('/api/projects/<project_id>/battle')
     def api_project_battle(project_id):
@@ -211,12 +231,14 @@ def register_project_routes(app, require_local_viewer):
             needed = ['chrome', 'kane', 'codex'] + (['gemini'] if breaker == 'gemini' else [])
             if info['project'].get('adapter')=='seatpilot':
                 needed += ['node']
+            if project_id == 'seatpilot-generated' and breaker == 'gemini' and not (ROOT/'instance/targets/seatpilot/flow-map.json').is_file():
+                raise ValueError('The generated Gemini mode needs the local SeatPilot exploration map. Scripted mode is available.')
             if not all(info['prerequisites'][name] for name in needed):
                 raise ValueError('Setup incomplete. Install/sign in to Kane and Codex. For Gemini, restart Arena from a shell with GEMINI_API_KEY, GEMINI_MODEL and free-tier confirmation configured. Keys are never accepted or stored by this form.')
             if kane_live.get_active_session() and kane_live.get_active_session().status == 'running':
                 raise ValueError('A run is already active.')
             source = ROOT
-            if project_id == 'seatpilot':
+            if project_id in {'seatpilot','seatpilot-generated'}:
                 # The runner populates a fresh directory from the bundled, reviewed source.
                 source = Path(app.config['ARENA_PROJECTS']) / 'seatpilot' / uuid.uuid4().hex
             elif project_id != 'builtin':
@@ -226,7 +248,8 @@ def register_project_routes(app, require_local_viewer):
                 prepare_source(folder, record, source)
             session = start_battle(source, Path(app.config['ARENA_DATABASE']),
                 Path(app.config['ARENA_ARTIFACTS']), breaker, data.get('show_browser', True),
-                **({'adapter_name':'seatpilot'} if info['project'].get('adapter')=='seatpilot' else {}))
+                **({'adapter_name':'seatpilot'} if info['project'].get('adapter')=='seatpilot' else {}),
+                **({'generated_hash':info['test_sha256']} if project_id == 'seatpilot-generated' else {}))
             return app.json.response(status=session.status)
         except (ValueError, OSError) as error:
             # Validation messages are local fixed strings, never raw subprocess logs.

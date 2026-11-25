@@ -69,12 +69,39 @@ class SeatPilotAdapterTests(unittest.TestCase):
 
     def test_only_integration_and_session_label_changed_design_sources(self):
         original=json.loads((adapter.EXAMPLE/'original-source-sha256.json').read_text())
-        changed=[name for name,expected in original.items() if adapter.sha(adapter.EXAMPLE/'frontend'/name)!=expected]
+        changed=[name for name,expected in original.items() if adapter.export_sha(adapter.EXAMPLE/'frontend'/name)!=expected]
         self.assertEqual(changed,['src/api/seatpilotClient.ts','src/components/BookingLookupBar.tsx'])
         client=(adapter.EXAMPLE/'frontend/src/api/seatpilotClient.ts').read_text()
         implementation=client.split('async function requestWithDemoFallback',1)[1].split('export const seatpilotClient',1)[0]
         self.assertNotIn('await demoFallback',implementation)
         self.assertIn('BACKEND_UNAVAILABLE',implementation)
+
+    def test_export_recognition_accepts_lf_and_crlf_but_rejects_changed_content(self):
+        manifest=json.loads((adapter.EXAMPLE/'adapted-source-sha256.json').read_text())
+        for ending in (b'\n', b'\r\n'):
+            with self.subTest(ending=ending):
+                target=self.root/('lf' if ending==b'\n' else 'crlf')
+                for name in manifest:
+                    source=adapter.EXAMPLE/'frontend'/name
+                    data=source.read_bytes()
+                    if source.suffix in {'.ts','.tsx','.css','.html','.json'}:
+                        data=data.replace(b'\r\n',b'\n').replace(b'\n',ending)
+                    dest=target/name
+                    dest.parent.mkdir(parents=True,exist_ok=True)
+                    dest.write_bytes(data)
+                self.assertTrue(adapter.matches_export(target))
+                changed=target/'src/App.tsx'
+                changed.write_bytes(changed.read_bytes()+b'// unreviewed change')
+                self.assertFalse(adapter.matches_export(target))
+
+    def test_export_normalization_does_not_change_binary_or_protected_hashes(self):
+        import hashlib
+        binary=self.root/'fixture.jpg'
+        binary.write_bytes(b'\x00\r\n\xff')
+        self.assertEqual(adapter.export_sha(binary),hashlib.sha256(binary.read_bytes()).hexdigest())
+        text=self.root/'fixture.ts'
+        text.write_bytes(b'first\r\nsecond\r\n')
+        self.assertNotEqual(adapter.export_sha(text),adapter.sha(text))
 
     def test_kane_runner_uses_seatpilot_suite_without_accepting_arbitrary_files(self):
         events='\n'.join(json.dumps(e) for e in [dict(type='test_md_summary',overall_status='passed',steps=dict(total=5,passed=5)),dict(type='test_md_done',overall_status='passed')])
