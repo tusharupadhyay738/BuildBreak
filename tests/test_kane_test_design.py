@@ -85,6 +85,17 @@ class KaneDesignTests(unittest.TestCase):
         with self.assertRaisesRegex(DesignError, 'exact result assertion'):
             validate_generated_test(site, content)
 
+    def test_rejects_extra_steps_and_external_navigation(self):
+        site = read_site(SOURCE)
+        valid = (b'## Step 1\nOpen {{start_url}}.\n\n## Step 2\n'
+                 b'Click show-entry-price and assert entry-price equals $18.00.\n')
+        validate_generated_test(site, valid)
+        with self.assertRaisesRegex(DesignError, 'exactly two'):
+            validate_generated_test(site, valid + b'\n## Step 3\nBrowse elsewhere.\n')
+        with self.assertRaisesRegex(DesignError, 'outside the LOCAL contract'):
+            validate_generated_test(site, valid.replace(b'Open {{start_url}}.',
+                                                    b'Open {{start_url}} then https://example.com.'))
+
     def test_bind_start_url_only_in_disposable_bytes(self):
         source = b'## Step 1\nOpen {{start_url}}.\n'
         bound = bind_start_url(source, 'http://127.0.0.1:61234')

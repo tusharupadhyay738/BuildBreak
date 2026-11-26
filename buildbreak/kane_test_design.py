@@ -59,11 +59,22 @@ def validate_generated_test(site, data):
         text = data.decode('utf-8')
     except UnicodeError:
         raise DesignError('Kane test definition is not UTF-8.') from None
-    if ('{{start_url}}' not in text or site.result_id not in text
-            or site.expected not in text or not re.search(r'\bassert\b', text, re.I)):
+    headings = list(re.finditer(r'^## Step ([1-9][0-9]*)[^\n]*\n', text, re.M))
+    if [match.group(1) for match in headings] != ['1', '2']:
+        raise DesignError('Kane test must contain exactly two numbered steps.')
+    opening = text[headings[0].end():headings[1].start()]
+    check = text[headings[1].end():]
+    if ('{{start_url}}' not in opening
+            or not re.search(r'\b(open|navigate|visit)\b', opening, re.I)
+            or site.result_id not in check or site.expected not in check
+            or not re.search(r'\bassert\b', check, re.I)):
         raise DesignError('Kane test omits the start URL or exact result assertion.')
+    if (re.search(r'https?://', opening + check, re.I)
+            or re.search(r'\b(type|submit|upload|download|purchase|delete|login)\b',
+                         opening + check, re.I)):
+        raise DesignError('Kane test includes an action outside the LOCAL contract.')
     if site.click_id:
-        if site.click_id not in text or not re.search(r'\b(click|activate|press)\b', text, re.I):
+        if site.click_id not in check or not re.search(r'\b(click|activate|press)\b', check, re.I):
             raise DesignError('Kane test omits the required control action.')
         if re.search(r'\b(if present|if available|if it exists|when present|optionally)\b',
                      text, re.I):

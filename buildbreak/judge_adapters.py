@@ -336,7 +336,7 @@ class LocalContractJudgeDriver:
         if test_bytes != self.test_bytes or self.test_hash() != hashlib.sha256(test_bytes).hexdigest():
             raise WorkflowError('Kane-generated LOCAL browser test changed after it was locked.')
         validate_generated_test(copy['site'], test_bytes)
-        if not 2 <= test_bytes.count(b'## Step ') <= 8:
+        if test_bytes.count(b'## Step ') != 2:
             raise WorkflowError('Kane-generated LOCAL test is outside the bounded step count.')
         actions = ['navigate', 'assert_text']
         if copy['site'].click_id:
