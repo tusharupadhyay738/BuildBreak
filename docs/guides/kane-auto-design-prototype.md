@@ -9,9 +9,33 @@ saved and returns its SHA-256. There is no human test-review step.
 
 The judge launch remains disabled. Mocked command results prove the sequence
 and fail-closed handling, not that the installed CLI produces a suitable test.
-No Kane credits were used to verify this prototype. A real output must still
-pass Arena's target/action/assertion checks and two fresh healthy browser runs
-before it may be given to Gemini. The human review is for Gemini's fault.
+A real output must pass Arena's target/action/assertion checks and two fresh
+healthy browser runs before it may be given to Gemini. The human review is for
+Gemini's fault. The design gate now rejects a conditional required click and a
+missing exact result assertion. A text gate alone cannot prove browser behavior.
+
+## Live Museum attempt, 26 November 2026
+
+One Kane extraction produced use case `uc-1`. One design call produced test
+`t-1` for criterion `ac-1`. The user approved that criterion. The generated
+test told Kane to activate `show-entry-price` **if present**, which made a
+required action optional. The test is retained only in ignored local storage;
+it is not a qualified suite.
+
+The first healthy run failed after the start URL was supplied in the wrong
+variable format. A corrected invocation followed the repo's variables-file
+format. Kane still warned that `start_url` was unresolved. Its first run
+reported pass, but Kane's own summary says it stayed on the LambdaTest
+playground and did not exercise the Museum page. Its second run failed because
+Kane skipped the price-reveal click. The failed verdict called
+this an automation misstep, not an application defect. Neither result qualifies
+the test; no fault injection or repair followed.
+
+The recorded balance fell from 8,516.0687 to 8,468.3320 credits across design
+and these health checks (about 47.74 credits). This includes the invalid first
+check. The source test remained unchanged. Future qualification must verify the
+actual target URL, required click and exact assertion from the trace, alongside
+two passes, before counting a test as kept.
 
 The one capped live design invocation, after ingest and extraction yield a
 single actual use-case ID, is:

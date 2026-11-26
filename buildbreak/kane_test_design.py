@@ -24,7 +24,8 @@ def requirements(site):
             f'{action}\n'
             f'The visible element with id {site.result_id} must display exactly '
             f'{site.expected}. Check its rendered text in Chrome.\n'
-            'Use only navigation, the stated click if present, and a visible-text assertion.\n')
+            'The stated action is required; do not make it conditional. '
+            'Use only navigation, that action, and a visible-text assertion.\n')
 
 
 def _invoke(executable, workspace, args, invoke):
@@ -45,6 +46,27 @@ def _use_case(lines):
             or entries[0].get('label') != 'usecase'):
         raise DesignError('Expected exactly one newly extracted Kane use-case.')
     return entries[0]['id']
+
+
+def validate_generated_test(site, data):
+    """Reject a designed test that can skip this contract's required browser check.
+
+    Text checks are only a preflight. Two healthy runs must still prove that
+    Chrome reached the target and made the required assertion.
+    """
+    try:
+        text = data.decode('utf-8')
+    except UnicodeError:
+        raise DesignError('Kane test definition is not UTF-8.') from None
+    if ('{{start_url}}' not in text or site.result_id not in text
+            or site.expected not in text or not re.search(r'\bassert\b', text, re.I)):
+        raise DesignError('Kane test omits the start URL or exact result assertion.')
+    if site.click_id:
+        if site.click_id not in text or not re.search(r'\b(click|activate|press)\b', text, re.I):
+            raise DesignError('Kane test omits the required control action.')
+        if re.search(r'\b(if present|if available|if it exists|when present|optionally)\b',
+                     text, re.I):
+            raise DesignError('Kane test makes the required control action optional.')
 
 
 def design_local_test(source, workspace, executable, invoke=None):
@@ -82,4 +104,5 @@ def design_local_test(source, workspace, executable, invoke=None):
     data = test.read_bytes()
     if not data or b'## Step ' not in data:
         raise DesignError('Kane did not save a numbered browser test.')
+    validate_generated_test(site, data)
     return {'use_case': use_case, 'test_path': test, 'test_sha256': hashlib.sha256(data).hexdigest()}

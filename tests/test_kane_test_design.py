@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 
-from buildbreak.kane_test_design import DesignError, design_local_test
+from buildbreak.kane_test_design import DesignError, design_local_test, validate_generated_test
+from buildbreak.site_contract import read_site
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +16,9 @@ SOURCE = ROOT / 'examples/local-contract-museum'
 class KaneDesignTests(unittest.TestCase):
     def test_uses_documented_commands_and_discovers_saved_test(self):
         calls = []
-        content = b'# Museum test\n\n## Step 1\nOpen the local site.\n'
+        content = (b'# Museum test\n\n## Step 1\nOpen {{start_url}}.\n\n'
+                   b'## Step 2\nClick show-entry-price and assert entry-price '
+                   b'equals exactly $18.00.\n')
 
         def invoke(args, cwd):
             calls.append(args[1:])
@@ -64,6 +67,21 @@ class KaneDesignTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaisesRegex(DesignError, 'exactly one new test'):
                 design_local_test(SOURCE, Path(temp) / 'design', 'kane-cli.cmd', invoke)
+
+    def test_rejects_optional_click_from_live_generated_test(self):
+        site = read_site(SOURCE)
+        content = (b'## Step 1\nOpen {{start_url}}.\n\n## Step 2\n'
+                   b'Activate show-entry-price if present, then assert '
+                   b'entry-price equals $18.00.\n')
+        with self.assertRaisesRegex(DesignError, 'optional'):
+            validate_generated_test(site, content)
+
+    def test_rejects_missing_exact_result_assertion(self):
+        site = read_site(SOURCE)
+        content = (b'## Step 1\nOpen {{start_url}}.\n\n## Step 2\n'
+                   b'Click show-entry-price and observe the page.\n')
+        with self.assertRaisesRegex(DesignError, 'exact result assertion'):
+            validate_generated_test(site, content)
 
 
 if __name__ == '__main__':
