@@ -12,6 +12,8 @@ from .fault_validator import (
     json_command, patch_details, protected, validate_fault,
 )
 from .gemini_breaker import PATCH_SCHEMA, generate_json
+from .kane_test_design import (DesignError, bind_start_url, design_local_test,
+                               validate_generated_test, verify_browser_trace)
 from .judge_workflow import RepairRejected, WorkflowError
 from . import site_contract
 
@@ -251,7 +253,7 @@ class LocalContractJudgeDriver:
     supported = True
     test_path = site_contract.TEST
 
-    def __init__(self, run_id, *, source, artifacts_root, python=None):
+    def __init__(self, run_id, *, source, artifacts_root, python=None, designer=None):
         self.source = Path(source).resolve()
         self.private = Path(artifacts_root) / run_id
         self.private.mkdir(parents=True, exist_ok=False)
@@ -261,9 +263,21 @@ class LocalContractJudgeDriver:
         self.test_paths = []
         self.copies = []
         self.recordings = None
+        self.designer = designer
 
     def test_definition(self, copy):
-        self.test_bytes = copy['site'].test()
+        executable = (battle_runner.executable('kane-cli') if self.designer is None
+                      else 'kane-cli.cmd')
+        proposal = (self.designer or design_local_test)(
+            self.source, self.private / 'kane-design', executable)
+        proposed = Path(proposal['test_path'])
+        if (not proposed.resolve().is_relative_to((self.private / 'kane-design').resolve())
+                or proposed.is_symlink() or not proposed.is_file()):
+            raise WorkflowError('Kane did not save a private test definition.')
+        self.test_bytes = proposed.read_bytes()
+        if proposal.get('test_sha256') != hashlib.sha256(self.test_bytes).hexdigest():
+            raise WorkflowError('Kane-generated test changed before Arena could lock it.')
+        validate_generated_test(copy['site'], self.test_bytes)
         self._write_test(copy)
         return self.test_bytes
 
@@ -319,10 +333,11 @@ class LocalContractJudgeDriver:
         return copy['url']
 
     def validate_test(self, test_bytes, copy):
-        if test_bytes != copy['site'].test() or self.test_hash() != hashlib.sha256(test_bytes).hexdigest():
-            raise WorkflowError('LOCAL browser test differs from its versioned adapter contract.')
-        if test_bytes.count(b'## Step ') != 5:
-            raise WorkflowError('LOCAL test does not have the expected bounded step count.')
+        if test_bytes != self.test_bytes or self.test_hash() != hashlib.sha256(test_bytes).hexdigest():
+            raise WorkflowError('Kane-generated LOCAL browser test changed after it was locked.')
+        validate_generated_test(copy['site'], test_bytes)
+        if not 2 <= test_bytes.count(b'## Step ') <= 8:
+            raise WorkflowError('Kane-generated LOCAL test is outside the bounded step count.')
         actions = ['navigate', 'assert_text']
         if copy['site'].click_id:
             actions.append('click')
@@ -484,6 +499,8 @@ class KaneCLI:
         test_path = copy['workspace'] / self.driver.test_path
         if hashlib.sha256(test_path.read_bytes()).hexdigest() != expected_hash:
             raise WorkflowError('Kane workspace test differs from its lock.')
+        if self.driver.adapter_id == 'local-contract':
+            return self._run_local(copy, test_bytes, expected_hash)
         output = test_path.parent / ('output-' + test_path.stem.removesuffix('_test'))
         if not author and self.recordings and not output.exists():
             shutil.copytree(self.recordings, output)
@@ -499,6 +516,38 @@ class KaneCLI:
         if author and output.is_dir() and self.recordings is None:
             self.recordings = self.driver.private / 'kane-authoring-recordings'
             shutil.copytree(output, self.recordings)
+        return result
+
+    def _run_local(self, copy, test_bytes, expected_hash):
+        """Run a URL-bound copy of Kane's locked source definition."""
+        url = self.driver.target_for(copy)
+        bound = bind_start_url(test_bytes, url)
+        relative = Path('.testmuai/tests/BoundSiteContract_test.md')
+        path = copy['workspace'] / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('xb') as stream:
+            stream.write(bound)
+        steps = test_bytes.count(b'## Step ')
+        artifacts = copy['artifacts'] / ('kane-' + str(self.run_number))
+        result = battle_runner._run_testmd(
+            copy['workspace'], artifacts, url,
+            'ArenaJudge' + copy['id'].replace('-', ''), self.executable,
+            relative, steps, show_browser=self.show_browser,
+            cdp_endpoint=None, author=False)
+        if result['test_hash'] != hashlib.sha256(bound).hexdigest():
+            raise WorkflowError('Bound Kane test changed during execution.')
+        if result['result'] in {'passed', 'verification_failed'}:
+            try:
+                verify_browser_trace((artifacts / 'events.ndjson').read_text(encoding='utf-8'),
+                                     url, copy['site'], result['result'])
+            except (DesignError, OSError):
+                result['result'] = 'infrastructure_error'
+                result['failure'] = ''
+        if hashlib.sha256((copy['workspace'] / self.driver.test_path).read_bytes()).hexdigest() != expected_hash:
+            raise WorkflowError('Kane-generated source definition changed during execution.')
+        result['bound_test_hash'] = result['test_hash']
+        result['test_hash'] = expected_hash
+        result['target_url'] = url
         return result
 
 

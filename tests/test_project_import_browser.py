@@ -152,7 +152,7 @@ class ProjectImportBrowserTests(unittest.TestCase):
     def test_new_judge_workflow_requires_fault_decision_without_live_agents(self):
         expect(self.page.locator('#judge-start')).to_be_disabled()
         expect(self.page.locator('#judge-status')).to_contain_text(
-            'Kane testmd run requires an existing'
+            'LOCAL static-data contract'
         )
         self.page.locator('#project-local-sample').click()
         expect(self.page.locator('#project-status')).to_contain_text(
@@ -160,17 +160,19 @@ class ProjectImportBrowserTests(unittest.TestCase):
         )
 
         preflight = {
-            'project': {'id': 'builtin', 'adapter': 'breakshop', 'compatible': True,
+            'project': {'id': 'local-contract-sample', 'adapter': 'local-contract', 'compatible': True,
                         'reason': 'Offline mocked adapter fixture.'},
-            'prerequisites': {'chrome': True, 'kane': True, 'codex': True, 'gemini': True},
+            'prerequisites': {'chrome': True, 'kane': True, 'codex': True,
+                              'gemini': True, 'playwright': True},
             'enabled': True,
             'judge_workflow_available': True,
             'test_text': 'Synthetic adapter test fixture.',
             'test_sha256': 'fixture-hash',
         }
-        self.page.route('**/api/projects/builtin/preflight', lambda route: route.fulfill(
+        self.page.route('**/api/projects/local-contract-sample/preflight', lambda route: route.fulfill(
             status=200, content_type='application/json', body=json.dumps(preflight)))
         self.page.reload()
+        self.page.locator('#project-local-sample').click()
         expect(self.page.locator('#judge-start')).to_be_enabled()
         start_count = {'value': 0}
 
@@ -178,7 +180,7 @@ class ProjectImportBrowserTests(unittest.TestCase):
             start_count['value'] += 1
             route.fulfill(status=202, content_type='application/json', body=json.dumps({
                 'workflow': {
-                    'id': 'offline-test-run', 'adapter': 'breakshop', 'state': 'authoring_test',
+                    'id': 'offline-test-run', 'adapter': 'local-contract', 'state': 'authoring_test',
                     'result': '', 'test_sha256': '', 'fault_description': '', 'fault_diff': '',
                     'proposal_id': '', 'events': [{'state': 'authoring_test',
                         'message': 'Synthetic test authoring fixture.'}], 'error': '',
@@ -188,7 +190,7 @@ class ProjectImportBrowserTests(unittest.TestCase):
         self.page.route('**/api/judge-workflow', start_workflow)
 
         pending = {
-            'id': 'offline-test-run', 'adapter': 'breakshop', 'state': 'awaiting_fault_approval',
+            'id': 'offline-test-run', 'adapter': 'local-contract', 'state': 'awaiting_fault_approval',
             'result': '', 'test_sha256': 'fixture-hash',
             'fault_description': 'Synthetic bounded fault fixture.',
             'fault_diff': '--- a/app.py\\n+++ b/app.py\\n@@ -1 +1 @@\\n-expected\\n+changed',

@@ -24,9 +24,19 @@ balance measurement, not an itemized invoice. The private packs, action logs,
 runtime-bound test copies and qualification helper remain under Git-ignored
 `instance/targets/local-museum/design-attempt-02/`.
 
-This verifies one browser regression on the fictional Museum app. It does not
-prove that the expected $18.00 is a correct business requirement, that a fault
-would be detected, or that the general judge workflow is integrated. No Gemini
-fault, Codex repair or dashboard battle ran. The test is not promoted as an
-active judge suite yet; the product runner still needs the same URL binding and
-trace checks before it can safely use this test in a battle.
+## Controlled changed-copy diagnostic
+
+After integration, one separate disposable copy changed the declared
+`price_cents` field from 1800 to 1700. Arena's independent browser observation
+confirmed the displayed value changed. The unchanged Kane-authored test then
+reached that copy, clicked the control and failed its `$18.00` assertion. The
+runner classified this as `verification_failed` and validated the sealed pack.
+Evidence ID: `ee86b514-fc87-48f0-8c27-a4f298b9bc35`. The account balance
+fell from 8,360.7227 to 8,340.2068 during this diagnostic, about 20.52
+credits. Private artifacts remain in ignored local storage.
+
+This verifies a single browser regression and a controlled detection on the
+fictional Museum app. It does not prove that $18.00 is the correct business
+requirement or that the full judge workflow succeeds with Gemini and Codex.
+The changed-copy check was initiated directly for diagnosis, not through the
+dashboard. No live Gemini fault, Codex repair or dashboard battle ran.

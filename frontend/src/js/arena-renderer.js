@@ -1185,7 +1185,7 @@ function renderProjectSetup(judgeWorkflows = []) {
     <div class="rounded-lg border border-slate-300 p-4 space-y-3" aria-labelledby="judge-workflow-heading">
       <div>
         <h3 id="judge-workflow-heading" class="text-sm font-semibold text-slate-900">Test-targeted judge workflow</h3>
-        <p class="mt-1 text-xs text-slate-600">Live execution is blocked until Kane can create a local browser-test definition from a healthy app without a manual test-review step. The installed CLI’s <code>testmd run --author</code> reauthors an existing test; <code>design tests</code> requires an existing use-case. Arena will not substitute an adapter-authored test or call an agent. The status below explains the blocker.</p>
+        <p class="mt-1 text-xs text-slate-600">Choose a LOCAL static-data site. Kane designs its browser test from the site contract; Arena locks the definition and requires two verified healthy runs. Gemini then proposes one data-field fault for your review. Approve that fault to continue to Kane detection, Codex repair and Kane reverification. This path needs local CLI setup and uses credits.</p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <button id="judge-start" type="button" disabled class="rounded bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Start judge workflow</button>

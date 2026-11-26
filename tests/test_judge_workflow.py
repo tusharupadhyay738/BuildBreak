@@ -7,9 +7,10 @@ import threading
 import time
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from buildbreak.battle_runner import ROOT
-from buildbreak.judge_adapters import BreakShopJudgeDriver, LocalContractJudgeDriver
+from buildbreak.judge_adapters import BreakShopJudgeDriver, LocalContractJudgeDriver, KaneCLI
 from buildbreak.judge_workflow import (
     JudgeRegistry, JudgeRun, RepairRejected, WorkflowError, execute_judge_workflow,
 )
@@ -462,11 +463,79 @@ class BreakShopWorkflowIntegrationTests(unittest.TestCase):
 
 
 class LocalContractWorkflowIntegrationTests(unittest.TestCase):
+    def test_kane_local_run_binds_only_runtime_copy_and_rejects_false_pass(self):
+        example = ROOT / 'examples/local-contract-museum'
+        definition = (b'## Step 1\nOpen {{start_url}}.\n\n'
+                      b'## Step 2\nClick show-entry-price and assert entry-price '
+                      b'has rendered text exactly $18.00.\n')
+        with tempfile.TemporaryDirectory() as temporary:
+            driver = LocalContractJudgeDriver(
+                'offline-bound-test', source=example,
+                artifacts_root=Path(temporary) / 'artifacts', designer=lambda *_: None)
+            driver.test_bytes = definition
+            copy = driver.fresh_healthy_copy(1)
+            expected = driver.test_hash()
+            kane = KaneCLI('kane-cli.cmd', driver)
+            seen = []
+
+            def synthetic_run(workspace, artifacts, url, name, executable, test_path,
+                              expected_steps, **kwargs):
+                bound = (workspace / test_path).read_bytes()
+                self.assertIn(url.encode('ascii'), bound)
+                self.assertNotIn(b'{{start_url}}', bound)
+                self.assertEqual(expected_steps, 2)
+                self.assertFalse(kwargs['author'])
+                self.assertEqual((workspace / driver.test_path).read_bytes(), definition)
+                artifacts.mkdir()
+                page = url if not seen else 'https://kaneai-playground.lambdatest.io'
+                events = [
+                    {'type': 'step_event', 'event': 'screenshot', 'detail': page},
+                    {'type': 'step_event', 'event': 'action', 'action_type': 'navigate',
+                     'success': True, 'detail': 'Navigate to ' + url},
+                    {'type': 'step_event', 'event': 'action', 'action_type': 'click',
+                     'success': True, 'detail': 'Click Show entry price'},
+                    {'type': 'step_end', 'kind': 'assert', 'status': 'passed',
+                     'summary': 'entry-price has rendered text exactly $18.00'},
+                    {'type': 'test_md_done', 'overall_status': 'passed'},
+                ]
+                (artifacts / 'events.ndjson').write_text(
+                    '\n'.join(json.dumps(event) for event in events), encoding='utf-8')
+                seen.append(page)
+                return dict(result='passed', evidence_id='synthetic-fixture',
+                            pack_hash='a' * 64, test_hash=hashlib.sha256(bound).hexdigest(),
+                            duration=1, failure='')
+
+            try:
+                with patch('buildbreak.judge_adapters.battle_runner._run_testmd',
+                           side_effect=synthetic_run):
+                    first = kane.run(copy, definition, expected, author=True)
+                    self.assertEqual(first['result'], 'passed')
+                    self.assertEqual(first['test_hash'], expected)
+                    self.assertNotEqual(first['bound_test_hash'], expected)
+                    # A second fresh copy that reports a playground pass is infrastructure.
+                    second_copy = driver.fresh_healthy_copy(2)
+                    second = kane.run(second_copy, definition, expected, author=False)
+                    self.assertEqual(second['result'], 'infrastructure_error')
+            finally:
+                driver.close()
+
     def test_third_app_completes_flow_with_real_local_browser_and_mocked_agents(self):
         example = ROOT / 'examples/local-contract-museum'
         with tempfile.TemporaryDirectory() as temporary:
+            def synthetic_designer(source, workspace, executable):
+                workspace.mkdir(parents=True)
+                test = workspace / 'fixture_test.md'
+                test.write_text(
+                    '# Synthetic Kane test fixture\n\n'
+                    '## Step 1\nOpen {{start_url}}.\n\n'
+                    '## Step 2\nClick show-entry-price and assert entry-price '
+                    'has rendered text exactly $18.00.\n', encoding='utf-8')
+                return {'test_path': test,
+                        'test_sha256': hashlib.sha256(test.read_bytes()).hexdigest()}
+
             driver = LocalContractJudgeDriver(
-                'offline-museum', source=example, artifacts_root=Path(temporary) / 'artifacts')
+                'offline-museum', source=example, artifacts_root=Path(temporary) / 'artifacts',
+                designer=synthetic_designer)
             seen = {'author_flags': []}
 
             class Kane:

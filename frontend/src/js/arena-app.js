@@ -862,8 +862,7 @@ export function initArenaDashboard() {
   function updateJudgeStart() {
     const button = document.getElementById('judge-start');
     if (!button) return;
-    const supported = projectInfo?.project?.adapter === 'breakshop' ||
-      projectInfo?.project?.adapter === 'local-contract';
+    const supported = projectInfo?.project?.adapter === 'local-contract';
     const requirements = projectInfo?.prerequisites || {};
     const missing = ['chrome', 'kane', 'codex', 'gemini'].filter((name) => !requirements[name]);
     if (projectInfo?.project?.adapter === 'local-contract' && !requirements.playwright) missing.push('playwright');
@@ -880,9 +879,9 @@ export function initArenaDashboard() {
       projectText('judge-status', 'This Arena process has already used its one judge workflow slot.');
     } else if (supported && projectInfo && !projectInfo.judge_workflow_available) {
       projectText('judge-status', projectInfo.judge_workflow_blocker ||
-        'Live judge workflow is blocked because Kane cannot create the required local test definition.');
+        'The Kane-generated judge workflow is unavailable for this project.');
     } else if (!supported && projectInfo) {
-      projectText('judge-status', 'This app has no supported judge adapter. Choose BreakShop or a valid LOCAL static-data contract.');
+      projectText('judge-status', 'Choose a valid LOCAL static-data contract for the Kane-generated judge workflow.');
     } else if (projectInfo && !projectInfo.enabled) {
       projectText('judge-status', 'Local execution is disabled. Enable it and restart Arena before starting.');
     } else if (missing.length) {

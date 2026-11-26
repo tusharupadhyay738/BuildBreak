@@ -154,7 +154,7 @@ class ProjectSetupTests(unittest.TestCase):
         self.assertIn('test_sha256', response.json)
         self.assertIn('authentication', response.json)
         self.assertFalse(response.json['judge_workflow_available'])
-        self.assertIn('Kane testmd run requires an existing', response.json['judge_workflow_blocker'])
+        self.assertIn('LOCAL static-data contract', response.json['judge_workflow_blocker'])
         for value in [b'fixture-secret', str(ROOT).encode(), str(self.root).encode()]:
             self.assertNotIn(value, response.data)
 
@@ -231,10 +231,9 @@ class ProjectSetupTests(unittest.TestCase):
             self.assertTrue(project['compatible'])
             preflight = self.client.get('/api/projects/' + project['id'] + '/preflight')
             self.assertEqual(preflight.status_code, 200)
-            self.assertEqual(preflight.json['test_origin'],
-                             'Generated and automatically checked from the LOCAL contract; no test approval box in the judge workflow.')
-            self.assertFalse(preflight.json['judge_workflow_available'])
-            self.assertIn('Kane testmd run requires an existing', preflight.json['judge_workflow_blocker'])
+            self.assertIn('Kane generates and locks the test', preflight.json['test_origin'])
+            self.assertTrue(preflight.json['judge_workflow_available'])
+            self.assertIn('LOCAL static-data contract', preflight.json['judge_workflow_blocker'])
             self.assertIn('Museum Exhibit Price Card', preflight.json['test_text'])
             launch = self.client.post('/api/projects/' + project['id'] + '/battle',
                 json=dict(approved=True, breaker='scripted', test_sha256=preflight.json['test_sha256']),
@@ -247,9 +246,27 @@ class ProjectSetupTests(unittest.TestCase):
         with patch('buildbreak.judge_adapters.build_judge_agents') as build_agents:
             response = self.client.post('/api/judge-workflow', json={'project_id': 'builtin'},
                                         headers=self.headers)
-        self.assertEqual(response.status_code, 409)
-        self.assertIn('Kane testmd run requires an existing', response.json['error'])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('LOCAL static-data project', response.json['error'])
         build_agents.assert_not_called()
+
+    def test_local_judge_route_starts_only_after_local_preflight(self):
+        from buildbreak.judge_workflow import JudgeRegistry
+        with patch('buildbreak.judge_workflow.GLOBAL_JUDGE_REGISTRY', JudgeRegistry()), \
+             patch('buildbreak.judge_adapters.build_judge_agents',
+                   return_value=SimpleNamespace()) as build_agents, \
+             patch('buildbreak.judge_workflow.execute_judge_workflow') as execute:
+            preflight = self.client.get('/api/projects/local-contract-sample/preflight')
+            self.assertEqual(preflight.status_code, 200)
+            self.assertTrue(preflight.json['judge_workflow_available'])
+            self.assertIn('Kane generates', preflight.json['test_origin'])
+            response = self.client.post('/api/judge-workflow',
+                                        json={'project_id': 'local-contract-sample'},
+                                        headers=self.headers)
+            self.assertEqual(response.status_code, 202, response.json)
+            self.assertEqual(response.json['workflow']['adapter'], 'local-contract')
+            build_agents.assert_called_once()
+            execute.assert_called_once()
 
     def test_isolated_app_copy_does_not_expose_judge_workflow_routes(self):
         isolated = create_app({

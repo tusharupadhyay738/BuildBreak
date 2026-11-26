@@ -83,8 +83,10 @@ def bind_start_url(data, url):
     return data.replace(marker, url.encode('ascii'))
 
 
-def verify_healthy_trace(lines, url, site):
-    """Require the recorded browser page, click and exact check, not a status alone."""
+def verify_browser_trace(lines, url, site, outcome):
+    """Require the target page, click and expected assertion outcome."""
+    if outcome not in {'passed', 'verification_failed'}:
+        raise DesignError('Unknown Kane browser outcome.')
     events = []
     try:
         for line in lines.splitlines():
@@ -111,13 +113,18 @@ def verify_healthy_trace(lines, url, site):
         for event in actions)
     check_seen = any(event.get('type') == 'step_end'
                      and event.get('kind') == 'assert'
-                     and event.get('status') == 'passed'
+                     and event.get('status') == ('passed' if outcome == 'passed' else 'failed')
                      and site.result_id in str(event.get('summary', ''))
                      and site.expected in str(event.get('summary', ''))
                      for event in events)
-    if (len(done) != 1 or done[0].get('overall_status') != 'passed'
+    if (len(done) != 1 or done[0].get('overall_status') !=
+            ('passed' if outcome == 'passed' else 'failed')
             or not page_seen or not navigation_seen or not click_seen or not check_seen):
-        raise DesignError('Kane did not prove the target page, required click and passing check.')
+        raise DesignError('Kane did not prove the target page, required click and matching assertion.')
+
+
+def verify_healthy_trace(lines, url, site):
+    verify_browser_trace(lines, url, site, 'passed')
 
 
 def design_local_test(source, workspace, executable, invoke=None):

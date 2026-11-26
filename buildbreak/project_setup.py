@@ -13,11 +13,10 @@ from . import kane_live
 from .project_import import import_zip, load_project, inspect_project, MAX_ZIP
 
 ROOT = Path(__file__).resolve().parents[1]
-KANE_DEFINITION_CREATION_SUPPORTED = False
+KANE_DEFINITION_CREATION_SUPPORTED = True
 JUDGE_WORKFLOW_BLOCKER = (
-    'Live judge workflow is disabled: Kane testmd run requires an existing *_test.md definition, '
-    '--author reauthors that existing test, and design tests requires a use-case rather than '
-    'creating a local definition from a healthy app. No agent was started.'
+    'Kane-generated judge battles currently support only a valid LOCAL static-data contract. '
+    'Choose the Museum sample or import a compatible LOCAL ZIP.'
 )
 
 
@@ -186,16 +185,17 @@ def register_project_routes(app, require_local_viewer):
         if record.get('adapter') == 'local-contract':
             from .site_contract import read_site
             site = read_site(project_folder)
-            test = site.test()
+            from .kane_test_design import requirements as local_requirements
+            note = local_requirements(site)
             requirements = prerequisites()
             from importlib.util import find_spec
             requirements['playwright'] = find_spec('playwright') is not None
             return dict(
                 project=record, prerequisites=requirements,
                 enabled=bool(app.config['ARENA_ENABLE_LIVE_KANE']),
-                test_text=test.decode('utf-8'),
-                test_sha256=hashlib.sha256(test).hexdigest(),
-                test_origin='Generated and automatically checked from the LOCAL contract; no test approval box in the judge workflow.',
+                test_text=note,
+                test_sha256='',
+                test_origin='Requirements preview. Kane generates and locks the test after Start judge workflow; you review the Gemini fault.',
                 judge_workflow_available=KANE_DEFINITION_CREATION_SUPPORTED,
                 judge_workflow_blocker=JUDGE_WORKFLOW_BLOCKER,
                 authentication='CLI presence only; authentication and account allowances are checked by the real run.',
@@ -219,7 +219,7 @@ def register_project_routes(app, require_local_viewer):
             requirements['node'] = bool(shutil.which('node')) and bool(shutil.which('npm.cmd') or shutil.which('npm'))
         return dict(project=record, prerequisites=requirements, enabled=bool(app.config['ARENA_ENABLE_LIVE_KANE']),
                     test_text=test.decode('utf-8'), test_sha256=hashlib.sha256(test).hexdigest(),
-                    judge_workflow_available=KANE_DEFINITION_CREATION_SUPPORTED,
+                    judge_workflow_available=False,
                     judge_workflow_blocker=JUDGE_WORKFLOW_BLOCKER,
                     authentication='CLI presence only; authentication and account allowances are checked by the real run.',
                     supported='BreakShop and the recognized SeatPilot export have explicit adapters. Other React apps still require an adapter.')
@@ -311,10 +311,7 @@ def register_project_routes(app, require_local_viewer):
         project_id = data['project_id']
         try:
             if project_id == 'builtin':
-                adapter_id = 'breakshop'
-                driver_factory = lambda run_id: BreakShopJudgeDriver(
-                    run_id, artifacts_root=app.config.get(
-                        'ARENA_JUDGE_ARTIFACTS', Path(app.instance_path) / 'judge-workflows'))
+                raise WorkflowError('Choose a LOCAL static-data project for the Kane-generated judge workflow.')
             elif project_id == 'local-contract-sample':
                 adapter_id = 'local-contract'
                 driver_factory = lambda run_id: LocalContractJudgeDriver(
