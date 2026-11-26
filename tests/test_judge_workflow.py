@@ -1,9 +1,14 @@
 """Offline fixtures for the opt-in judge workflow; no agent CLIs are launched."""
 import hashlib
+from pathlib import Path
+import tempfile
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 
+from buildbreak.battle_runner import ROOT
+from buildbreak.judge_adapters import BreakShopJudgeDriver
 from buildbreak.judge_workflow import (
     JudgeRegistry, JudgeRun, WorkflowError, execute_judge_workflow,
 )
@@ -255,6 +260,75 @@ class JudgeWorkflowTests(unittest.TestCase):
         with self.assertRaises(WorkflowError):
             registry.decide(run.id, 'proposal-1', 'approve')
         self.assertEqual(run.decision, 'approve')
+
+
+class BreakShopWorkflowIntegrationTests(unittest.TestCase):
+    def test_existing_adapter_runs_through_mocked_gate_and_real_local_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            driver = BreakShopJudgeDriver(
+                'offline-breakshop', artifacts_root=Path(temporary) / 'artifacts')
+            original_source = (ROOT / 'app.py').read_text(encoding='utf-8')
+            proposal = {
+                'file': 'app.py',
+                'old_text': 'Decimal("0.10")',
+                'new_text': 'Decimal("0.05")',
+                'description': 'Change one pricing constant for an offline fixture.',
+            }
+            seen = {}
+
+            class Kane:
+                def run(self, copy, test, expected_hash, author):
+                    if copy['stage'] == 'healthy':
+                        result = 'passed'
+                    elif copy['stage'] == 'broken':
+                        result = 'verification_failed'
+                    else:
+                        result = 'passed'
+                    seen.setdefault('author_flags', []).append(author)
+                    return dict(result=result, evidence_id='synthetic-' + copy['id'],
+                                test_hash=expected_hash, target_url=driver.target_for(copy),
+                                failure='Synthetic Kane assertion: total should be $40.47.')
+
+            class Gemini:
+                def propose(self, source, test, contract):
+                    seen['gemini_source'] = source
+                    seen['gemini_test'] = test
+                    return proposal
+
+            class Codex:
+                def repair(self, source, evidence):
+                    seen['codex_source'] = source
+                    seen['codex_evidence'] = evidence
+                    return {'explanation': 'Synthetic repair fixture.', 'app_source': original_source}
+
+            agents = SimpleNamespace(kane=Kane(), gemini=Gemini(), codex=Codex())
+            run = JudgeRun(adapter_id='breakshop')
+            worker = threading.Thread(target=execute_judge_workflow,
+                                      args=(run, driver, agents, 2), daemon=True)
+            try:
+                worker.start()
+                deadline = time.monotonic() + 10
+                while run.state != 'awaiting_fault_approval' and worker.is_alive() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertEqual(run.state, 'awaiting_fault_approval')
+                self.assertEqual((driver.original_workspace / 'app.py').read_text(encoding='utf-8'),
+                                 original_source)
+                self.assertIn('app.py', run.fault_diff)
+                run.decide(run.proposal_id, 'approve')
+                worker.join(timeout=30)
+                self.assertFalse(worker.is_alive(), 'offline integration workflow did not finish')
+                self.assertEqual(run.state, 'completed', run.public())
+                self.assertEqual(seen['author_flags'], [True, False, False, False])
+                self.assertEqual(seen['gemini_test'], driver.test_bytes)
+                self.assertEqual(set(seen['codex_source']), {'app.py'})
+                self.assertIn('Decimal("0.05")', seen['codex_source']['app.py'])
+                self.assertNotIn('Gemini', seen['codex_source']['app.py'])
+                self.assertEqual(seen['codex_evidence']['summary'],
+                                 'Synthetic Kane assertion: total should be $40.47.')
+            finally:
+                if worker.is_alive():
+                    worker.join(timeout=30)
+                driver.close()
 
 
 if __name__ == '__main__':

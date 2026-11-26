@@ -311,12 +311,14 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=F
 
 
 def _run_testmd(workspace, artifacts, url, name, kane, test_path, expected_steps, timeout=1200,
-                show_browser=False, on_line=None, cdp_endpoint=None, variables_file=None):
+                show_browser=False, on_line=None, cdp_endpoint=None, variables_file=None, author=False):
     artifacts.mkdir(parents=True, exist_ok=False)
     test_hash = digest(workspace / test_path)
     args = [kane, 'testmd', 'run', str(test_path), '--override-start-url', url,
             '--target', 'desktop', '--no-adaptive-heal',
-            '--timeout', '300', '--name', name, '--agent']
+            '--timeout', '300', '--name', name, '--agent', '--bug-detection', 'stop']
+    if author:
+        args.append('--author')
     if variables_file is not None:
         args.extend(['--variables-file', str(variables_file)])
     if not show_browser:
