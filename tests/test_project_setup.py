@@ -14,7 +14,7 @@ from app import create_app
 from buildbreak import kane_live
 from buildbreak.battle_runner import ROOT, TEST, snapshot, run_battle, SCHEMA
 from buildbreak.project_import import import_zip, load_project
-from buildbreak.project_setup import BattleSession, prepare_source
+from buildbreak.project_setup import BattleSession, JudgeLiveSession, prepare_source
 
 
 def archive(files):
@@ -322,6 +322,23 @@ class ProjectSetupTests(unittest.TestCase):
             self.assertIs(run.call_args.kwargs['on_line'].__self__, session)
             browser.return_value.close.assert_called_once()
         self.assertEqual(session.phase, 'before')
+
+    def test_judge_monitor_uses_isolated_browser_and_finishes_honestly(self):
+        session = JudgeLiveSession('a' * 32)
+        artifacts = self.root / 'judge' / 'kane-1'
+        artifacts.parent.mkdir()
+        copy = {'id': 'healthy-1', 'stage': 'healthy'}
+        with patch('buildbreak.live_browser.LiveBrowser') as browser:
+            browser.return_value.endpoint = 'http://127.0.0.1:9222'
+            session.start_capture(copy, artifacts, 'http://127.0.0.1:5501')
+            self.assertEqual(session.target_url, 'http://127.0.0.1:5501')
+            self.assertEqual(session.phase, 'healthy')
+            self.assertEqual(session.browser.endpoint, 'http://127.0.0.1:9222')
+            self.assertEqual(session.add_listener().get_nowait()['judge_id'], 'a' * 32)
+            session.stop_capture()
+            browser.return_value.close.assert_called_once()
+        session.finish_run(SimpleNamespace(state='completed', result='completed'))
+        self.assertEqual((session.status, session.result), ('passed', 'completed'))
 
     def test_battle_binding_exposes_only_public_reference_for_dashboard_following(self):
         session = BattleSession(ROOT, self.root/'db', self.root/'artifacts', 'scripted', False)

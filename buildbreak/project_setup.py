@@ -143,6 +143,45 @@ class BattleSession(kane_live.LiveKaneSession):
             self.broadcast(dict(type='status', status=self.status, result=self.result, message=self.error_message))
 
 
+class JudgeLiveSession(kane_live.LiveKaneSession):
+    """Read-only viewport and sanitized Kane events for one LOCAL judge run."""
+
+    def __init__(self, run_id):
+        super().__init__('http://127.0.0.1:5000', show_browser=False)
+        self.judge_id = run_id
+        self.test_path = 'Kane-generated LOCAL test (locked)'
+        self.started_at = time.time()
+        self.phase = 'authoring_test'
+
+    def start_capture(self, copy, artifacts, url):
+        from .live_browser import LiveBrowser
+        self.target_url = url
+        self.phase = copy['stage']
+        self.current_step, self.steps = 0, []
+        self.latest_screenshot, self.screenshot = None, None
+        self.broadcast(dict(type='phase', phase=self.phase,
+                            attempt=int(copy['id'].rsplit('-', 1)[-1]),
+                            test_path=self.test_path))
+        directory = artifacts.parent / ('browser-' + artifacts.name)
+        directory.mkdir()
+        self.browser = LiveBrowser(directory, url, False, self.browser_state)
+        self.browser.start()
+
+    def stop_capture(self):
+        if self.browser:
+            self.browser.close()
+            self.browser = None
+
+    def finish_run(self, run):
+        self.stop_capture()
+        self.result = run.result or run.state
+        self.status = ('passed' if run.state == 'completed' else
+                       'error' if run.state == 'infrastructure_error' else 'failed')
+        self.finished_at = time.time()
+        self.broadcast(dict(type='status', status=self.status, result=self.result,
+                            message='Judge workflow ' + run.state.replace('_', ' ') + '.'))
+
+
 def start_battle(source, database, artifacts, breaker, show_browser, adapter_name='breakshop', generated_hash=None):
     with kane_live._SESSION_LOCK:
         if kane_live._ACTIVE_SESSION and kane_live._ACTIVE_SESSION.status == 'running':
@@ -339,19 +378,25 @@ def register_project_routes(app, require_local_viewer):
             if missing:
                 raise WorkflowError('Install or configure the required local tools before starting: ' +
                                     ', '.join(missing) + '.')
-            run = GLOBAL_JUDGE_REGISTRY.create(adapter_id)
+            with kane_live._SESSION_LOCK:
+                if kane_live._ACTIVE_SESSION and kane_live._ACTIVE_SESSION.status == 'running':
+                    raise WorkflowError('A Kane run is active. Wait for it to finish.')
+                run = GLOBAL_JUDGE_REGISTRY.create(adapter_id)
+                monitor = JudgeLiveSession(run.id)
+                kane_live._ACTIVE_SESSION = monitor
             run.persist_callback = lambda record: save_judge_record(
                 app.config['ARENA_DATABASE'], record)
             try:
                 run.persist()
                 driver = driver_factory(run.id)
-                agents = build_judge_agents(driver, show_browser=False)
+                agents = build_judge_agents(driver, show_browser=False, monitor=monitor)
             except (OSError, RuntimeError, ValueError):
                 with run.lock:
                     run.state = 'infrastructure_error'
                     run.result = 'infrastructure_error'
                     run.error = 'Workflow setup failed; inspect private local logs.'
                 run.persist()
+                monitor.finish_run(run)
                 raise WorkflowError('Judge workflow setup failed; no agents were started.') from None
 
             def execute():
@@ -366,6 +411,7 @@ def register_project_routes(app, require_local_viewer):
                             run.result = 'infrastructure_error'
                             run.error = 'Isolated app cleanup failed; no completion is claimed.'
                         run.persist()
+                    monitor.finish_run(run)
 
             worker = threading.Thread(target=execute, daemon=True)
             try:
@@ -377,6 +423,7 @@ def register_project_routes(app, require_local_viewer):
                     run.result = 'infrastructure_error'
                     run.error = 'Workflow worker did not start; no agents were called.'
                 run.persist()
+                monitor.finish_run(run)
                 raise WorkflowError('Judge workflow worker could not start.') from None
             return app.json.response(workflow=run.public()), 202
         except (WorkflowError, ValueError, OSError) as error:

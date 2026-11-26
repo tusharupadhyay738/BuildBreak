@@ -485,10 +485,11 @@ class LocalContractJudgeDriver:
 class KaneCLI:
     """Run the exact locked definition; only the first healthy run authors it."""
 
-    def __init__(self, executable, driver, *, show_browser=False):
+    def __init__(self, executable, driver, *, show_browser=False, monitor=None):
         self.executable = executable
         self.driver = driver
         self.show_browser = show_browser
+        self.monitor = monitor
         self.recordings = None
         self.run_number = 0
 
@@ -529,11 +530,19 @@ class KaneCLI:
             stream.write(bound)
         steps = test_bytes.count(b'## Step ')
         artifacts = copy['artifacts'] / ('kane-' + str(self.run_number))
-        result = battle_runner._run_testmd(
-            copy['workspace'], artifacts, url,
-            'ArenaJudge' + copy['id'].replace('-', ''), self.executable,
-            relative, steps, show_browser=self.show_browser,
-            cdp_endpoint=None, author=False)
+        if self.monitor:
+            self.monitor.start_capture(copy, artifacts, url)
+        try:
+            result = battle_runner._run_testmd(
+                copy['workspace'], artifacts, url,
+                'ArenaJudge' + copy['id'].replace('-', ''), self.executable,
+                relative, steps, show_browser=self.show_browser,
+                on_line=self.monitor.handle_line if self.monitor else None,
+                cdp_endpoint=self.monitor.browser.endpoint if self.monitor else None,
+                author=False)
+        finally:
+            if self.monitor:
+                self.monitor.stop_capture()
         if result['test_hash'] != hashlib.sha256(bound).hexdigest():
             raise WorkflowError('Bound Kane test changed during execution.')
         if result['result'] in {'passed', 'verification_failed'}:
@@ -645,11 +654,11 @@ class CodexJudge:
 
 
 def build_breakshop_agents(driver, *, kane=None, gemini=None, codex=None,
-                           show_browser=False):
+                           show_browser=False, monitor=None):
     """Construct production ports; tests inject all agents and never launch CLIs."""
     return type('JudgeAgents', (), {
         'kane': kane or KaneCLI(battle_runner.executable('kane-cli'), driver,
-                                show_browser=show_browser),
+                                show_browser=show_browser, monitor=monitor),
         'gemini': gemini or GeminiJudge(),
         'codex': codex or CodexJudge(battle_runner.executable('codex'), driver),
     })()

@@ -7,7 +7,7 @@ import threading
 import time
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from buildbreak.battle_runner import ROOT
 from buildbreak.judge_adapters import BreakShopJudgeDriver, LocalContractJudgeDriver, KaneCLI
@@ -391,7 +391,8 @@ class JudgeWorkflowTests(unittest.TestCase):
 
 class BreakShopWorkflowIntegrationTests(unittest.TestCase):
     def test_existing_adapter_runs_through_mocked_gate_and_real_local_validation(self):
-        with tempfile.TemporaryDirectory() as temporary:
+        # Windows sandbox TEMP paths can exceed MAX_PATH after the nested copy.
+        with tempfile.TemporaryDirectory(dir=ROOT / 'instance') as temporary:
             driver = BreakShopJudgeDriver(
                 'offline-breakshop', artifacts_root=Path(temporary) / 'artifacts')
             original_source = (ROOT / 'app.py').read_text(encoding='utf-8')
@@ -463,6 +464,38 @@ class BreakShopWorkflowIntegrationTests(unittest.TestCase):
 
 
 class LocalContractWorkflowIntegrationTests(unittest.TestCase):
+    def test_local_kane_run_uses_owned_monitor_without_exposing_source_test(self):
+        example = ROOT / 'examples/local-contract-museum'
+        definition = (b'## Step 1\nOpen {{start_url}}.\n\n'
+                      b'## Step 2\nClick show-entry-price and assert entry-price '
+                      b'has rendered text exactly $18.00.\n')
+        with tempfile.TemporaryDirectory() as temporary:
+            driver = LocalContractJudgeDriver(
+                'offline-live-monitor', source=example,
+                artifacts_root=Path(temporary) / 'artifacts', designer=lambda *_: None)
+            driver.test_bytes = definition
+            copy = driver.fresh_healthy_copy(1)
+            monitor = Mock()
+            monitor.browser.endpoint = 'http://127.0.0.1:9222'
+            kane = KaneCLI('kane-cli.cmd', driver, monitor=monitor)
+
+            def fake_run(workspace, artifacts, url, name, executable, test_path,
+                         expected_steps, **options):
+                self.assertEqual(options['cdp_endpoint'], monitor.browser.endpoint)
+                self.assertIs(options['on_line'], monitor.handle_line)
+                return {'result': 'infrastructure_error',
+                        'test_hash': hashlib.sha256((workspace / test_path).read_bytes()).hexdigest()}
+
+            try:
+                with patch('buildbreak.judge_adapters.battle_runner._run_testmd', side_effect=fake_run):
+                    result = kane.run(copy, definition, driver.test_hash(), author=True)
+                self.assertEqual(result['result'], 'infrastructure_error')
+                monitor.start_capture.assert_called_once()
+                monitor.stop_capture.assert_called_once()
+                self.assertEqual((copy['workspace'] / driver.test_path).read_bytes(), definition)
+            finally:
+                driver.close()
+
     def test_kane_local_run_binds_only_runtime_copy_and_rejects_false_pass(self):
         example = ROOT / 'examples/local-contract-museum'
         definition = (b'## Step 1\nOpen {{start_url}}.\n\n'
