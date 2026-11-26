@@ -1,8 +1,79 @@
 """Allowlisted data adapter for the user's original console UI, never raw logs."""
-from .evidence_images import screenshot_for
-from .evidence_images import pack_path
-from flask import url_for
 import json
+import math
+import re
+from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
+
+from flask import url_for
+
+from .evidence_images import pack_path, screenshot_for
+
+
+def quote_observations(artifacts, battle):
+    if not isinstance(battle, str) or not re.fullmatch(r'\d{8}T\d{6}-[a-f0-9]{8}', battle):
+        return None
+    root = Path(artifacts).absolute()
+    path = root / battle / 'coverage-gap' / 'observations.json'
+    try:
+        if (any(candidate.is_symlink() or getattr(candidate, 'is_junction', lambda: False)()
+                for candidate in (path, *path.parents))
+                or not path.is_file() or path.stat().st_size > 20000
+                or not path.resolve().is_relative_to(root.resolve())):
+            return None
+        saved = json.loads(path.read_text(encoding='utf-8'))
+        if not isinstance(saved, dict):
+            return None
+        result = {}
+        for phase in ('healthy', 'changed'):
+            quote = saved.get(phase)
+            if not isinstance(quote, dict):
+                return None
+            values = {}
+            for source, label in (('subtotal', 'subtotal'), ('discountAmount', 'discount'),
+                                  ('total', 'total')):
+                amount = quote.get(source)
+                if (type(amount) not in (int, float) or amount < 0 or amount > 100000000
+                        or not math.isfinite(amount)):
+                    return None
+                cents = Decimal(str(amount)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                values[label] = '$' + format(cents, '.2f')
+            result[phase] = values
+        return result
+    except (OSError, ValueError, TypeError, ArithmeticError):
+        return None
+
+
+def escape_report(artifacts, session, generated_hashes):
+    detail = session.get('drill') or {}
+    if (not (session.get('mode') or '').startswith('SeatPilot generated suite /')
+            or not any(dict(run).get('test_hash') in generated_hashes for run in session['verifications'])):
+        return None
+    confirmed = bool(detail.get('independently_validated'))
+    escaped = (confirmed and session.get('state') == 'not_detected'
+               and detail.get('outcome') == 'escaped'
+               and detail.get('family') == 'seatpilot_pricing'
+               and detail.get('invariant') == 'healthy_vs_changed_quote')
+    caught = confirmed and detail.get('outcome') in {'caught_and_repaired', 'caught_needs_human'}
+    observations = quote_observations(artifacts, session['id']) if escaped else None
+    if observations and observations['healthy'] == observations['changed']:
+        observations = None
+    not_recorded = {key: 'Not recorded' for key in ('subtotal', 'discount', 'total')}
+    return {
+        'heading': 'Recorded escape review' if escaped else 'Generated-test fault review',
+        'healthyObservation': observations['healthy'] if observations else not_recorded,
+        'changedObservation': observations['changed'] if observations else not_recorded,
+        'faultStatus': ('Confirmed pricing fault escaped the selected checks.' if escaped
+                        else 'Caught a confirmed fault' if caught else 'Not recorded'),
+        'browserTestChecked': (
+            'Catalog headings before filtering, after selecting Chamber Music, '
+            'and after resetting to All Programs.'
+        ),
+        'missed': ('Ticket pricing; the unchanged catalog test has no pricing assertion.'
+                   if escaped else 'Not recorded'),
+        'followUp': ('A follow-up test requires explicit human approval before promotion.'
+                     if escaped else 'Not recorded'),
+    }
 
 
 def recorded_exit(artifacts, battle, run):
@@ -18,7 +89,7 @@ def recorded_exit(artifacts, battle, run):
         return 'Not recorded'
 
 
-def console_payload(sessions, artifacts, selected, format_time):
+def console_payload(sessions, artifacts, selected, format_time, generated_hashes=()):
     battles = []
     for session in sessions:
         detail = session.get('drill') or {}
@@ -86,16 +157,21 @@ def console_payload(sessions, artifacts, selected, format_time):
                  note=runs.get('after', {}).get('result', 'Not recorded'),
                  traceSnippet=runs.get('after', {}).get('evidence_id') or 'Not recorded'),
         ]
-        seatpilot = session['mode'].startswith('SeatPilot / ')
+        seatpilot = session['mode'].startswith('SeatPilot ')
         target_app = 'SeatPilot' if seatpilot else 'BreakShop'
-        test_name = 'SeatPilotBooking_test.md' if seatpilot else 'CheckoutConsistency_test.md'
+        if session['mode'].startswith('SeatPilot generated suite /'):
+            test_name = ('generated/seatpilot-attempt-02/'
+                         'seatpilot-featured-events-category-filter-and-reset_test.md')
+        else:
+            test_name = 'SeatPilotBooking_test.md' if seatpilot else 'CheckoutConsistency_test.md'
         checks = [dict(id=phase, command='kane-cli testmd run .testmuai/tests/' + test_name,
                        result=run['result'], detail='Execution: ' + (run['evidence_id'] or 'Not recorded') +
-                       '; protected test SHA-256: ' + run['test_hash']) for phase, run in runs.items()]
+                       '; approved test SHA-256: ' + run['test_hash']) for phase, run in runs.items()]
         battles.append(dict(
             id=session['id'], isSample=False, title=outcome + ' · ' + target_app, targetApp=target_app,
             recordedLabel=format_time(session['created']), breaker=detail.get('producer_label') or session['mode'],
             faultFamily=detail.get('family') or 'Not recorded', outcome=outcome, outcomeTone=tone,
+            escape=escape_report(artifacts, session, generated_hashes),
             repairAttempts=session['attempts'], maxAttempts=detail.get('max_attempts') or 3,
             summary=session['mode'] + ' · ' + (detail.get('source') or 'Source not recorded') +
                     ('. Results cover the frozen booking flow only; screenshots are viewports, not assertions. ' if seatpilot
@@ -106,7 +182,7 @@ def console_payload(sessions, artifacts, selected, format_time):
             verification=dict(
                 kaneExitCodeBefore=recorded_exit(artifacts, session['id'], runs.get('before')),
                 kaneExitCodeAfter=recorded_exit(artifacts, session['id'], runs.get('after')),
-                checksSummary='Recorded phase verdicts and protected-test references; no raw logs are exported.',
+                checksSummary='Recorded phase verdicts and approved-test references; no raw logs are exported.',
                 checks=checks, stdoutExcerpt='\n'.join(event['message'] for event in session['events']),
                 identifiers=dict(battleId=session['id'], geminiProposalId='Not recorded',
                                  arenaValidationId='Not recorded', codexRepairId='Not recorded',

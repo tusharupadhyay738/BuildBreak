@@ -15,7 +15,7 @@ The change was a scripted pricing change on an isolated SeatPilot copy. Kane's a
 
 ## Why separate roles
 
-- Kane writes and runs the tests.
+- Kane proposes generated tests and runs approved checks; protected curated demo tests are separate.
 - Gemini proposes bugs without seeing the tests.
 - Codex repairs from failure evidence.
 - Approved tests are hash-locked so a repair cannot weaken them.
@@ -54,8 +54,7 @@ In one recorded BreakShop run, the cart subtotal was **$44.97**. The discount sh
 
 ```mermaid
 flowchart TD
-    START["Choose a supported app and test scenario"] --> KANE["Kane writes the acceptance test"]
-    KANE --> APPROVE["Developer reviews and approves the test"]
+    START["Choose a supported app and test scenario"] --> APPROVE["Developer reviews and approves the selected test"]
     APPROVE --> LOCK["Lock the approved test hash"]
     LOCK --> BASE["Kane runs the test on a healthy isolated copy"]
     BASE --> FAULT["Breaker proposes or selects a bounded fault"]
@@ -119,7 +118,7 @@ Open the [Arena dashboard](http://127.0.0.1:5000/arena) or try two shirts, one s
 
 SeatPilot is a second application with a different question to test. When someone reserves tickets, do the saved booking and remaining inventory agree? The adapter pairs the AI Studio React design with a local Flask API and a separate protected booking test. It requires Node.js and npm to build the frontend. The image shows the running website. Live Kane repair evidence published here covers BreakShop. [Supported imports and adapter limits](docs/guides/self-service.md).
 
-Choose **SeatPilot generated suite** to run the approved catalog filter and reset test. It passed twice on fresh healthy copies. Arena compares the discount quote independently so a passing catalog check can reveal a gap in pricing coverage. [Generated-suite guide](docs/guides/generated-seatpilot.md) · [Recorded $13.60 pricing escape](docs/evidence/seatpilot-generated-escape.md).
+Choose **SeatPilot generated suite** to run the human-approved catalog filter and reset regression. It is separate from SeatPilot's protected curated booking test and passed twice on fresh healthy copies. That qualifies its observed catalog behavior only; it does not make the test generally trusted or show that it catches faults. In a separate recorded battle, the unchanged catalog test passed on a changed copy after Arena's independent quote check confirmed a pricing fault, so that fault escaped. Dashboard states keep healthy qualification separate from confirmed-fault results; missing results are not recorded. [Generated-suite guide](docs/guides/generated-seatpilot.md) · [Recorded pricing escape](docs/evidence/seatpilot-generated-escape.md).
 
 **Generated-mode scope:** bundled SeatPilot only, one qualified test in each selected suite, and numeric edits inside `pricing()` only. The dashboard currently selects the qualified catalog suite. A follow-up pricing test is eligible only after two fresh healthy passes; its separate CLI route requires the suite name and exact approved SHA-256. This is regression testing against observed healthy behavior, not general website support or proof of correctness. [Qualification and CLI instructions](docs/guides/generated-seatpilot.md).
 

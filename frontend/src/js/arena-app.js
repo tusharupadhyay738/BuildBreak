@@ -843,6 +843,12 @@ export function initArenaDashboard() {
     const node = document.getElementById(id);
     if (node) node.textContent = text;
   }
+  function projectApiError(error) {
+    if (error instanceof TypeError || error instanceof SyntaxError) {
+      return "Arena's Flask API is unavailable. Open http://127.0.0.1:5000/arena and try again.";
+    }
+    return error.message || 'Project request failed.';
+  }
   function updateProjectStart() {
     const button = document.getElementById('project-start');
     if (!button) return;
@@ -862,7 +868,7 @@ export function initArenaDashboard() {
     button.disabled = Boolean(next);
     projectText('project-next', next || 'Ready. Start the battle to watch Kane check the healthy app.');
   }
-  async function loadProject(id) {
+  async function loadProject(id, imported = false) {
     const version = ++selectionVersion;
     projectInfo = null;
     const approval = document.getElementById('project-approve');
@@ -875,8 +881,16 @@ export function initArenaDashboard() {
       if (!response.ok) throw new Error(data.error || 'Preflight failed.');
       projectInfo = data;
       selectedProject = id;
-      projectText('project-status', `${data.project.framework}: ${data.project.reason}`);
+      const adapter = data.project.compatible
+        ? `Runnable adapter: ${data.project.adapter === 'breakshop' ? 'BreakShop' : 'SeatPilot'}.`
+        : 'Inspection only: no runnable adapter.';
+      projectText('project-status', `${imported ? 'Import complete. ' : ''}${adapter} ${data.project.reason}`);
       projectText('project-test', data.project.compatible ? data.test_text : 'No test approved. A project-specific adapter is required.');
+      projectText('project-test-origin', !data.project.compatible
+        ? 'No approved test is available for this inspection-only import.'
+        : id === 'seatpilot-generated'
+          ? 'Kane CLI-generated proposal; separate from the protected curated tests and requires your approval.'
+          : 'Protected curated demo test; review and explicitly approve before launch.');
       projectText('project-test-hash', data.project.compatible ? `SHA-256: ${data.test_sha256}` : '');
       const p = data.prerequisites;
       projectText('setup-local-execution', data.enabled ? 'Enabled' : 'Disabled');
@@ -886,7 +900,7 @@ export function initArenaDashboard() {
       projectText('setup-gemini', p.gemini ? 'Configured' : 'Not configured');
       projectText('setup-node', p.node === undefined ? 'Not required' : p.node ? 'Found' : 'Missing');
     } catch (error) {
-      if (version === selectionVersion) projectText('project-status', error.message);
+      if (version === selectionVersion) projectText('project-status', projectApiError(error));
     }
     updateProjectStart();
   }
@@ -898,14 +912,26 @@ export function initArenaDashboard() {
     updateProjectStart();
     projectText('project-status','Importing source only; no project code or install scripts are being run...');
     const version = ++selectionVersion;
+    const button = document.getElementById('project-import');
+    if (button) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+    }
     const form = new FormData();
     form.append('project',file);
     try {
       const response = await fetch('/api/projects/import',{method:'POST',headers:{'X-Arena-Request':'1'},body:form});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Import failed.');
-      if (version === selectionVersion) await loadProject(data.project.id);
-    } catch (error) { if (version === selectionVersion) projectText('project-status',error.message); }
+      if (version === selectionVersion) await loadProject(data.project.id, true);
+    } catch (error) {
+      if (version === selectionVersion) projectText('project-status', projectApiError(error));
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+      }
+    }
   }
   async function launchProject() {
     if (!projectInfo || projectLaunching) return;

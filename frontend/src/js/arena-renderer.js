@@ -604,6 +604,10 @@ function renderHistorySection(allBattles, filteredBattles, selectedBattleId, { o
 
 function renderComparisonSection(battle) {
   const comparisons = Array.isArray(battle.comparisons) ? battle.comparisons : [];
+  const escape = battle.escape;
+  const observation = (values) => ['subtotal', 'discount', 'total']
+    .map((key) => `${key[0].toUpperCase()}${key.slice(1)}: ${escapeHtml(values?.[key] || 'Not recorded')}`)
+    .join(' · ');
 
   return `
     <section id="comparison" aria-labelledby="comparison-heading" class="bg-white border border-slate-200 rounded-lg overflow-hidden">
@@ -620,6 +624,24 @@ function renderComparisonSection(battle) {
           ${comparisons.length} assertion${comparisons.length === 1 ? '' : 's'}
         </span>
       </div>
+
+      ${escape ? `
+        <div class="mx-6 my-4 rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3" aria-label="Recorded escape review">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900">${escapeHtml(escape.heading || 'Generated-test fault review')}</h3>
+            <p class="mt-1 text-xs text-amber-900">${escapeHtml(escape.faultStatus || 'Not recorded')}</p>
+          </div>
+          <dl class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div><dt class="font-medium text-slate-700">Healthy observation</dt><dd class="mt-1 font-mono text-slate-800">${observation(escape.healthyObservation)}</dd></div>
+            <div><dt class="font-medium text-slate-700">Changed observation</dt><dd class="mt-1 font-mono text-slate-800">${observation(escape.changedObservation)}</dd></div>
+          </dl>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <p><span class="font-medium text-slate-700">Unchanged browser test checked:</span> ${escapeHtml(escape.browserTestChecked || 'Not recorded')}</p>
+            <p><span class="font-medium text-slate-700">It missed:</span> ${escapeHtml(escape.missed || 'Not recorded')}</p>
+          </div>
+          <p class="text-xs text-slate-700"><span class="font-medium">Follow-up:</span> ${escapeHtml(escape.followUp || 'Not recorded')}</p>
+        </div>
+      ` : ''}
 
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse">
@@ -1080,6 +1102,21 @@ function renderProjectSetup() {
   return `<section id="project-setup-panel" class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
     <h2 class="font-display text-lg font-semibold text-slate-900">Start a full battle</h2>
     <p class="text-sm text-slate-600">Choose a demo to see what Kane will check, or import a supported source ZIP.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs" aria-label="Demo test review">
+      <article class="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1.5">
+        <h3 class="font-semibold text-slate-900">BreakShop · protected curated test</h3>
+        <p><span class="font-medium">Flow:</span> Reset the cart, add two shirts and one sticker, apply SAVE10, place the order, then reload its confirmation.</p>
+        <p><span class="font-medium">Expected:</span> $44.97 subtotal, $4.50 discount and $40.47 total, including after reload.</p>
+        <p><span class="font-medium">Limit:</span> One checkout scenario; other quantities, coupons and checkout paths are not covered.</p>
+      </article>
+      <article class="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1.5">
+        <h3 class="font-semibold text-slate-900">SeatPilot · protected curated test</h3>
+        <p><span class="font-medium">Flow:</span> Book two Nocturne Symphony tickets with EARLY15, confirm the booking, then reload it.</p>
+        <p><span class="font-medium">Expected:</span> $136.00 subtotal, $20.40 discount, $115.60 total and inventory reduced from 42 to 40.</p>
+        <p><span class="font-medium">Limit:</span> This event and coupon scenario only; it does not cover every event, coupon or concurrent booking.</p>
+      </article>
+    </div>
+    <p class="text-xs text-slate-500">The protected curated tests are separate from generated proposals. Review and explicitly approve the selected test below.</p>
     <div class="flex flex-wrap items-center gap-3">
       <button id="project-seatpilot" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Try SeatPilot ticket booking</button>
       <button id="project-generated" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">SeatPilot generated suite</button>
@@ -1087,6 +1124,7 @@ function renderProjectSetup() {
       <input id="project-zip" type="file" accept=".zip,application/zip" aria-label="Project source ZIP" class="text-sm text-slate-700">
       <button id="project-import" type="button" class="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Import ZIP</button>
     </div>
+    <p class="text-xs text-slate-500">ZIP import requires the local Flask API. If this static preview cannot import, open <a class="underline underline-offset-2" href="http://127.0.0.1:5000/arena">http://127.0.0.1:5000/arena</a>.</p>
     <p id="project-status" role="status" class="text-sm text-slate-600">Checking local setup...</p>
     <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2" aria-label="Setup">
       <h3 class="text-sm font-semibold text-slate-900">Setup</h3>
@@ -1105,6 +1143,7 @@ function renderProjectSetup() {
     </div>
     <details class="rounded border border-slate-200 p-3">
       <summary class="cursor-pointer text-sm font-medium">Review the acceptance test before approval</summary>
+      <p id="project-test-origin" class="mt-3 text-xs text-slate-500"></p>
       <pre id="project-test" class="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-slate-700"></pre>
       <p id="project-test-hash" class="mt-2 break-all font-mono text-[10px] text-slate-500"></p>
     </details>

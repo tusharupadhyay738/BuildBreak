@@ -178,7 +178,7 @@ def register_project_routes(app, require_local_viewer):
             if len(eligible) != 1:
                 raise ValueError('SeatPilot generated suite needs one approved test with two healthy passes.')
             test_path = suite / next(iter(eligible))
-            record.update(id=project_id, reason='Use the qualified Kane-generated regression on the isolated SeatPilot app.')
+            record.update(id=project_id, reason='Use the qualified, human-approved generated catalog regression; the protected curated booking test is separate.')
         test = (ROOT / test_path).read_bytes()
         if project_id == 'seatpilot-generated' and hashlib.sha256(test).hexdigest() != eligible[test_path.name]:
             raise ValueError('Generated definition changed during preflight.')

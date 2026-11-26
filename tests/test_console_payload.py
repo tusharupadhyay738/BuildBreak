@@ -1,6 +1,7 @@
 """Offline console adapter fixtures; these are not live Kane executions."""
 from contextlib import closing
 from pathlib import Path
+import json
 import tempfile
 import re
 import sqlite3
@@ -9,6 +10,7 @@ import unittest
 from app import create_app
 from buildbreak.battle_runner import connect, record_run
 from buildbreak.battle_history import save_details
+from buildbreak.console_payload import console_payload
 
 
 class ConsoleTests(unittest.TestCase):
@@ -62,6 +64,83 @@ class ConsoleTests(unittest.TestCase):
         battle = self.client.get('/arena/data').get_json()['battles'][0]
         self.assertIn('Infrastructure', battle['outcome'])
         self.assertNotEqual(battle['outcome'], 'Success')
+
+    def test_confirmed_seatpilot_escape_exposes_only_recorded_quote_fields(self):
+        battle_id = '20261124T151404-6db82d63'
+        folder = self.root / battle_id / 'coverage-gap'
+        folder.mkdir(parents=True)
+        (folder / 'observations.json').write_text(json.dumps({
+            'healthy': {'subtotal': 136, 'discountAmount': 20.4, 'total': 115.6},
+            'changed': {'subtotal': 136, 'discountAmount': 6.8, 'total': 129.2},
+            'healthy_source': 'SYNTHETIC_PRIVATE_FINGERPRINT',
+            'evidence_id': 'SYNTHETIC_PRIVATE_ID',
+        }), encoding='utf-8')
+        session = {
+            'id': battle_id,
+            'created': '2026-11-24T15:14:04+00:00',
+            'state': 'not_detected',
+            'mode': 'SeatPilot generated suite / scripted Breaker / codex Builder',
+            'attempts': 0,
+            'events': [],
+            'drill': {'outcome': 'escaped', 'independently_validated': 1,
+                      'family': 'seatpilot_pricing', 'invariant': 'healthy_vs_changed_quote',
+                      'max_attempts': 3},
+            'verifications': [
+                {'phase': 'baseline', 'attempt': 0, 'result': 'passed',
+                 'evidence_id': 'synthetic', 'pack_hash': 'fixture',
+                 'test_hash': 'approved-generated-fixture'},
+                {'phase': 'before', 'attempt': 0, 'result': 'passed',
+                 'evidence_id': 'synthetic', 'pack_hash': 'fixture',
+                 'test_hash': 'approved-generated-fixture'},
+            ],
+        }
+
+        payload = console_payload([session], self.root, battle_id, lambda _: 'Synthetic record',
+                                  {'approved-generated-fixture'})
+        escape = payload['battles'][0]['escape']
+        self.assertEqual(escape['healthyObservation'],
+                         {'subtotal': '$136.00', 'discount': '$20.40', 'total': '$115.60'})
+        self.assertEqual(escape['changedObservation'],
+                         {'subtotal': '$136.00', 'discount': '$6.80', 'total': '$129.20'})
+        self.assertIn('no pricing assertion', escape['missed'])
+        self.assertIn('human approval', escape['followUp'])
+        self.assertEqual(payload['battles'][0]['targetApp'], 'SeatPilot')
+        before_check = next(check for check in payload['battles'][0]['verification']['checks']
+                            if check['id'] == 'before')
+        self.assertIn('generated/seatpilot-attempt-02/', before_check['command'])
+        self.assertNotIn('SYNTHETIC_PRIVATE', json.dumps(payload))
+
+    def test_escape_report_requires_qualified_hash_and_marks_missing_values(self):
+        session = {
+            'id': '20261124T151404-6db82d63',
+            'created': '2026-11-24T15:14:04+00:00',
+            'mode': 'SeatPilot generated suite / scripted Breaker / codex Builder',
+            'state': 'not_detected',
+            'attempts': 0,
+            'events': [],
+            'drill': {'outcome': 'escaped', 'independently_validated': 1,
+                      'family': 'seatpilot_pricing', 'invariant': 'healthy_vs_changed_quote',
+                      'max_attempts': 3},
+            'verifications': [{'phase': 'before', 'attempt': 0, 'result': 'passed',
+                               'evidence_id': 'synthetic', 'pack_hash': 'fixture',
+                               'test_hash': 'unqualified-fixture'}],
+        }
+        payload = console_payload([session], self.root, session['id'], lambda _: 'Synthetic record',
+                                  {'approved-generated-fixture'})
+        self.assertIsNone(payload['battles'][0]['escape'])
+
+        session['verifications'][0]['test_hash'] = 'approved-generated-fixture'
+        payload = console_payload([session], self.root, session['id'], lambda _: 'Synthetic record',
+                                  {'approved-generated-fixture'})
+        escape = payload['battles'][0]['escape']
+        self.assertEqual(escape['healthyObservation']['subtotal'], 'Not recorded')
+        self.assertEqual(escape['changedObservation']['total'], 'Not recorded')
+
+        session['drill']['independently_validated'] = 0
+        payload = console_payload([session], self.root, session['id'], lambda _: 'Synthetic record',
+                                  {'approved-generated-fixture'})
+        self.assertEqual(payload['battles'][0]['escape']['faultStatus'], 'Not recorded')
+        self.assertEqual(payload['battles'][0]['escape']['missed'], 'Not recorded')
 
     def test_original_shell_features_and_safe_json_injection(self):
         self.seed()

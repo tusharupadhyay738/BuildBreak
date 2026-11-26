@@ -86,14 +86,14 @@ class ArenaSampleReplayTests(unittest.TestCase):
         # Synthetic archive record for UI tests, not live agent evidence.
         with connect(self.database) as db:
             db.execute('INSERT INTO arena_sessions VALUES (?,?,?,?,?,?)',
-                       ('fixture-real', '2026-11-17T10:00:00+00:00', 'completed',
-                        'fixture-head', 'fixture', 1))
-            save_details(db, 'fixture-real', requested='gemini', producer='gemini',
+                       ('synthetic-fixture-real', '2026-11-17T10:00:00+00:00', 'completed',
+                        'fixture-head', 'SYNTHETIC fixture; not live evidence', 1))
+            save_details(db, 'synthetic-fixture-real', requested='gemini', producer='gemini',
                          source='live', validated=True, family='pricing',
                          invariant='saved_checkout_amounts', max_attempts=3)
         for phase, result in [('baseline', 'passed'), ('before', 'verification_failed'),
                               ('after', 'passed')]:
-            record_run(self.database, 'fixture-real', phase, int(phase == 'after'),
+            record_run(self.database, 'synthetic-fixture-real', phase, int(phase == 'after'),
                        dict(result=result, evidence_id='synthetic', pack_hash='fixture',
                             test_hash='fixture', duration=0))
         return self.client.get('/arena/data').get_json()
@@ -110,7 +110,8 @@ class ArenaSampleReplayTests(unittest.TestCase):
             'Showing a fictional UI demo (SAMPLE), not recorded Kane evidence. Your own battles will appear here.',
             exact=True,
         )).to_have_count(0)
-        expect(self.page.locator('#history')).to_contain_text('fixture-real')
+        expect(self.page.locator('#history')).to_contain_text('synthetic-fixture-real')
+        expect(self.page.get_by_text('SYNTHETIC fixture; not live evidence', exact=False).first).to_be_visible()
         expect(self.page.get_by_text('Showing 1 of 1 battles (All)', exact=True)).to_be_visible()
 
     def test_latest_archive_update_waits_for_setup_focus_then_applies(self):
@@ -125,7 +126,7 @@ class ArenaSampleReplayTests(unittest.TestCase):
         }''', payload)
         expect(self.page.get_by_text('Checkout order total renders NaN when tax rate is omitted', exact=True)).to_be_visible()
         self.page.locator('#project-approve').evaluate('(element) => element.blur()')
-        expect(self.page.locator('#history')).to_contain_text('fixture-real')
+        expect(self.page.locator('#history')).to_contain_text('synthetic-fixture-real')
         expect(self.page.get_by_text('Newest fixture result', exact=True).first).to_be_visible()
 
     def test_archive_update_waits_for_replay_then_applies_without_new_event(self):

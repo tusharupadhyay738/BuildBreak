@@ -9,7 +9,7 @@ from flask import render_template, request, abort, url_for
 from datetime import datetime, timedelta, timezone
 from .battle_history import decorate, summarize
 from .evidence_images import screenshot_for
-from .generated_suite import dashboard_suites
+from .generated_suite import dashboard_suites, qualified_tests
 from .console_payload import console_payload
 from .kane_live import start_live_session, get_active_session
 
@@ -28,6 +28,47 @@ def display_time(value):
         return local.strftime('%d %b, %I:%M %p') + ' IST'
     except (ValueError, TypeError):
         return 'Time unavailable'
+
+
+def dashboard_generated_hashes(root):
+    suite = Path(root) / 'seatpilot-attempt-02'
+    try:
+        return set(qualified_tests(suite).values())
+    except (OSError, ValueError, KeyError, TypeError):
+        return set()
+
+
+def generated_suite_cards(root, sessions):
+    summaries = dashboard_suites(Path(root))
+    for suite in summaries:
+        counts = suite['counts']
+        suite['healthy_state'] = (
+            'Passed twice on healthy app' if counts and counts['kept']
+            else 'Healthy verification pending' if counts and counts['kept'] + counts['dropped'] < counts['approved']
+            else 'No test passed twice on a healthy app' if counts
+            else 'Not recorded'
+        )
+        suite['fault_state'] = 'Not recorded'
+        if not counts:
+            continue
+        try:
+            approved_hashes = set(qualified_tests(Path(root) / suite['target']).values())
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        for session in sessions:
+            if not session.get('mode', '').startswith('SeatPilot generated suite /'):
+                continue
+            if not any(dict(run).get('test_hash') in approved_hashes for run in session['verifications']):
+                continue
+            detail = session.get('drill') or {}
+            if detail.get('independently_validated'):
+                if detail.get('outcome') in {'caught_and_repaired', 'caught_needs_human'}:
+                    suite['fault_state'] = 'Caught a confirmed fault'
+                elif detail.get('outcome') == 'escaped':
+                    suite['fault_state'] = 'A confirmed fault escaped the selected checks'
+            break
+    return summaries
+
 
 SCHEMA = """CREATE TABLE IF NOT EXISTS battles (
  id TEXT PRIMARY KEY, baseline TEXT, fault TEXT, repair TEXT);
@@ -126,7 +167,9 @@ def register_arena(app):
     def arena_data():
         sessions = live_battles()
         selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
-        response = app.json.response(console_payload(sessions, app.config['ARENA_ARTIFACTS'], selected, display_time))
+        hashes = dashboard_generated_hashes(app.config['ARENA_GENERATED_SUITES'])
+        response = app.json.response(console_payload(sessions, app.config['ARENA_ARTIFACTS'],
+                                                     selected, display_time, hashes))
         response.headers.update({'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
         return response
 
@@ -235,8 +278,11 @@ def register_arena(app):
             evidence[run["phase"]] = {key: availability(source.get(key)) for key in ("report", "pack")}
         sessions = live_battles()
         selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
+        generated_suites = generated_suite_cards(app.config['ARENA_GENERATED_SUITES'], sessions)
+        hashes = dashboard_generated_hashes(app.config['ARENA_GENERATED_SUITES'])
         attach_screenshots(sessions, selected)
         return render_template("arena.html", battle=battle, runs=runs, evidence=evidence, sessions=sessions,
-                               generated_suites=dashboard_suites(Path(app.config["ARENA_GENERATED_SUITES"])),
+                               generated_suites=generated_suites,
                                selected_id=selected, scores=summarize(sessions),
-                               console_payload=console_payload(sessions, app.config['ARENA_ARTIFACTS'], selected, display_time))
+                               console_payload=console_payload(sessions, app.config['ARENA_ARTIFACTS'],
+                                                               selected, display_time, hashes))
