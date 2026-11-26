@@ -17,6 +17,7 @@ From the repository root:
 | Faults, cache and independent probes | `test_fault_validator.py`, `test_fault_cache.py`, `test_quantity_fault.py` |
 | Agent contracts and comparison | `test_gemini_breaker.py`, `test_gemini_runner.py`, `test_builder_ablation.py` |
 | Environment, code guards and layout | `test_process_control.py`, `test_repository_layout.py` |
+| Judge workflow and dashboard persistence | `test_judge_workflow.py`, `test_project_setup.py`, `test_project_import_browser.py` |
 
 Mocked agent/browser results are synthetic fixtures, never live battle evidence.
 The real Kane Markdown definitions remain in `.testmuai/tests/`; the protected

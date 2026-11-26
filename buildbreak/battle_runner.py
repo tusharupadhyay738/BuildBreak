@@ -102,6 +102,7 @@ def snapshot(source, destination):
              'buildbreak/kane_live.py', 'buildbreak/generated_suite.py',
              'buildbreak/live_browser.py', 'buildbreak/project_import.py', 'buildbreak/project_setup.py',
              'buildbreak/seatpilot_adapter.py', 'buildbreak/seatpilot_runner.py',
+             'buildbreak/judge_history.py',
              'requirements.txt', TEST.as_posix()]
     for folder in ('templates', 'static'):
         files += [p.relative_to(source).as_posix() for p in (source / folder).rglob('*') if p.is_file()]

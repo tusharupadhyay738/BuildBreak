@@ -34,7 +34,7 @@ def inspect_project(folder, canonical):
             return dict(framework='Static site', adapter=None, compatible=False,
                         reason='LOCAL adapter contract is invalid. No imported scripts or server code were run.')
         return dict(framework='Static site', adapter='local-contract', compatible=True,
-                    reason=f'LOCAL data-only adapter for {site.name}. Only declared static assets and one JSON field are supported; no ZIP scripts run.')
+                    reason=f'LOCAL data-only adapter for {site.name}; imported scripts and server code are never run.')
     app = folder / 'app.py'
     if app.is_file():
         try:

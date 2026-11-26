@@ -2,6 +2,7 @@
 from copy import deepcopy
 from dataclasses import dataclass, field
 import hashlib
+import re
 import subprocess
 import threading
 import time
@@ -19,10 +20,28 @@ PERMITTED_ACTIONS = {'navigate', 'click', 'type', 'assert_text', 'reload'}
 MAX_TEST_BYTES = 100_000
 MAX_DIFF_BYTES = 20_000
 MAX_FAILURE_BYTES = 8_000
+MAX_REPAIR_ATTEMPTS = 3
+EVIDENCE_ID = re.compile(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}')
+SHA256 = re.compile(r'[a-f0-9]{64}')
+
+
+def _safe_events(events):
+    return [
+        {
+            'state': event['state'],
+            'message': event['state'].replace('_', ' ').capitalize(),
+            'at': event['at'],
+        }
+        for event in events
+    ]
 
 
 class WorkflowError(ValueError):
     """A local judge workflow cannot safely continue."""
+
+
+class RepairRejected(WorkflowError):
+    """Arena rejected a Codex candidate before it could be accepted."""
 
 
 @dataclass
@@ -38,11 +57,32 @@ class JudgeRun:
     decision: str = ''
     result: str = ''
     error: str = ''
+    executions: list = field(default_factory=list)
+    persist_callback: object = field(default=None, repr=False)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     approval_deadline: float = 0.0
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
     decision_ready: threading.Event = field(default_factory=threading.Event, repr=False)
+
+    def history_record(self):
+        with self.lock:
+            return {
+                'id': self.id,
+                'adapter': self.adapter_id,
+                'created_at': self.created_at,
+                'updated_at': self.updated_at,
+                'state': self.state,
+                'result': self.result,
+                'test_sha256': self.test_sha256,
+                'events': _safe_events(self.events),
+                'executions': deepcopy(self.executions),
+            }
+
+    def persist(self):
+        callback = self.persist_callback
+        if callback is not None:
+            callback(self.history_record())
 
     def emit(self, state, message):
         with self.lock:
@@ -51,6 +91,36 @@ class JudgeRun:
             self.state = state
             self.updated_at = time.time()
             self.events.append({'state': state, 'message': message, 'at': self.updated_at})
+        self.persist()
+
+    def record_execution(self, stage, attempt, result, expected_hash):
+        if (stage not in {'healthy', 'fault', 'repair'} or type(attempt) is not int
+                or not 1 <= attempt <= MAX_REPAIR_ATTEMPTS
+                or result.get('result') not in TEST_RESULT_STATES
+                or not isinstance(expected_hash, str) or not SHA256.fullmatch(expected_hash)):
+            raise WorkflowError('Kane execution record failed validation.')
+        execution_id = result.get('evidence_id')
+        if not isinstance(execution_id, str) or not EVIDENCE_ID.fullmatch(execution_id):
+            execution_id = None
+        evidence_ref = result.get('pack_hash')
+        if not isinstance(evidence_ref, str) or not SHA256.fullmatch(evidence_ref):
+            evidence_ref = None
+        duration = result.get('duration', 0)
+        if (type(duration) not in (int, float) or duration < 0
+                or not isinstance(duration, (int, float))):
+            duration = 0
+        with self.lock:
+            self.executions.append({
+                'stage': stage,
+                'attempt': attempt,
+                'result': result['result'],
+                'execution_id': execution_id,
+                'evidence_ref': evidence_ref,
+                'test_sha256': expected_hash,
+                'duration': duration,
+            })
+            self.updated_at = time.time()
+        self.persist()
 
     def decide(self, proposal_id, decision):
         if decision not in {'approve', 'reject'}:
@@ -70,6 +140,7 @@ class JudgeRun:
                 'at': self.updated_at,
             })
             self.decision_ready.set()
+        self.persist()
 
     def public(self):
         with self.lock:
@@ -82,7 +153,8 @@ class JudgeRun:
                 'fault_description': self.fault_description if self.state == 'awaiting_fault_approval' else '',
                 'fault_diff': self.fault_diff if self.state == 'awaiting_fault_approval' else '',
                 'proposal_id': self.proposal_id if self.state == 'awaiting_fault_approval' else '',
-                'events': deepcopy(self.events),
+                'events': _safe_events(self.events),
+                'executions': deepcopy(self.executions),
                 'error': self.error,
             }
 
@@ -158,8 +230,9 @@ def _checked_test_result(driver, copy, result, expected_hash):
             or driver.test_hash() != expected_hash):
         raise WorkflowError('The locked test changed during verification.')
     if (result.get('result') not in TEST_RESULT_STATES
-            or not isinstance(result.get('evidence_id'), str)
-            or not result['evidence_id']):
+            or (result.get('result') != 'infrastructure_error'
+                and (not isinstance(result.get('evidence_id'), str)
+                     or not result['evidence_id']))):
         raise WorkflowError('Kane evidence or verdict is missing or invalid.')
     return result
 
@@ -171,6 +244,7 @@ def _set_terminal(run, state, message, error=''):
         run.error = error
         run.updated_at = time.time()
         run.events.append({'state': state, 'message': message, 'at': run.updated_at})
+    run.persist()
     return run
 
 
@@ -202,6 +276,7 @@ def execute_judge_workflow(run, driver, agents, approval_timeout=120):
             result = _checked_test_result(
                 driver, copy, agents.kane.run(copy, test_bytes, expected_hash, author=(attempt == 1)),
                 expected_hash)
+            run.record_execution('healthy', attempt, result, expected_hash)
             if result['result'] == 'infrastructure_error':
                 return _set_terminal(run, 'infrastructure_error',
                                      'Healthy Kane verification was interrupted; no challenge was started.')
@@ -258,6 +333,7 @@ def execute_judge_workflow(run, driver, agents, approval_timeout=120):
         run.emit('verifying_fault', 'Kane is running the same locked test on the confirmed changed copy.')
         broken_result = _checked_test_result(
             driver, broken, agents.kane.run(broken, test_bytes, expected_hash, author=False), expected_hash)
+        run.record_execution('fault', 1, broken_result, expected_hash)
         if broken_result['result'] == 'infrastructure_error':
             return _set_terminal(run, 'infrastructure_error',
                                  'Broken-copy verification was interrupted; no scored result was recorded.')
@@ -271,29 +347,50 @@ def execute_judge_workflow(run, driver, agents, approval_timeout=120):
                 or not isinstance(evidence.get('summary'), str)
                 or len(evidence['summary'].encode('utf-8')) > MAX_FAILURE_BYTES):
             raise WorkflowError('Kane failure evidence is invalid or exceeds its limit.')
-        broken_source = driver.codex_source(broken)
-        if not isinstance(broken_source, dict) or not broken_source:
-            raise WorkflowError('No broken source was prepared for Codex.')
-        run.emit('repairing', 'Codex receives only broken source and Kane failure evidence.')
-        repair = agents.codex.repair(broken_source, evidence)
-        candidate_repair = driver.validate_repair(broken, repair)
-        driver.apply_repair(broken, candidate_repair)
-        if not driver.independent_repair_probe(broken):
-            return _set_terminal(run, 'repair_failed',
-                                 'Arena did not confirm the repair with its independent behavior probe.')
-        if driver.test_hash() != expected_hash:
-            raise WorkflowError('The locked test changed before repair verification.')
-        run.emit('verifying_repair', 'Kane is re-verifying the repaired copy with the same locked test.')
-        repaired_result = _checked_test_result(
-            driver, broken, agents.kane.run(broken, test_bytes, expected_hash, author=False), expected_hash)
-        if repaired_result['result'] == 'infrastructure_error':
-            return _set_terminal(run, 'infrastructure_error',
-                                 'Repair verification was interrupted; no repair victory was recorded.')
-        if repaired_result['result'] != 'passed':
-            return _set_terminal(run, 'repair_failed',
-                                 'The repaired copy did not pass the locked browser test.')
-        return _set_terminal(run, 'completed',
-                             'Arena checked the repair and Kane passed the unchanged locked test.')
+        repair_evidence = evidence
+        for repair_attempt in range(1, MAX_REPAIR_ATTEMPTS + 1):
+            run.emit('repairing',
+                     f'Codex repair attempt {repair_attempt} of {MAX_REPAIR_ATTEMPTS}; only broken source and Kane evidence are provided.')
+            repair_copy = driver.repair_copy(broken, repair_attempt)
+            try:
+                repair_source = driver.codex_source(repair_copy)
+                if not isinstance(repair_source, dict) or not repair_source:
+                    raise WorkflowError('No broken source was prepared for Codex.')
+                repair = agents.codex.repair(repair_source, repair_evidence)
+                candidate_repair = driver.validate_repair(repair_copy, repair)
+                driver.apply_repair(repair_copy, candidate_repair)
+            except RepairRejected:
+                run.emit('repair_rejected',
+                         f'Arena rejected Codex attempt {repair_attempt}; Kane was not run on this candidate.')
+                continue
+            if not driver.independent_repair_probe(repair_copy):
+                run.emit('repair_rejected',
+                         f'Arena checks rejected Codex attempt {repair_attempt}; Kane was not run on this candidate.')
+                continue
+            if driver.test_hash() != expected_hash:
+                raise WorkflowError('The locked test changed before repair verification.')
+            run.emit('verifying_repair',
+                     f'Kane is re-verifying repair attempt {repair_attempt} with the same locked test.')
+            repaired_result = _checked_test_result(
+                driver, repair_copy,
+                agents.kane.run(repair_copy, test_bytes, expected_hash, author=False), expected_hash)
+            run.record_execution('repair', repair_attempt, repaired_result, expected_hash)
+            if repaired_result['result'] == 'infrastructure_error':
+                return _set_terminal(run, 'infrastructure_error',
+                                     f'Kane repair verification {repair_attempt} was interrupted; no repair victory was recorded.')
+            if repaired_result['result'] == 'passed':
+                return _set_terminal(run, 'completed',
+                                     f'Arena checked repair attempt {repair_attempt} and Kane passed the unchanged locked test.')
+            repair_evidence = driver.kane_evidence(repaired_result)
+            if (not isinstance(repair_evidence, dict) or set(repair_evidence) != {'summary', 'test_hash'}
+                    or repair_evidence.get('test_hash') != expected_hash
+                    or not isinstance(repair_evidence.get('summary'), str)
+                    or len(repair_evidence['summary'].encode('utf-8')) > MAX_FAILURE_BYTES):
+                raise WorkflowError('Kane repair failure evidence is invalid or exceeds its limit.')
+            run.emit('repair_attempt_failed',
+                     f'Kane rejected Codex attempt {repair_attempt}; another bounded attempt may follow.')
+        return _set_terminal(run, 'repair_failed',
+                             f'Arena and Kane did not verify a repair within {MAX_REPAIR_ATTEMPTS} Codex attempts.')
     except (WorkflowError, OSError, RuntimeError, ValueError, TypeError, KeyError,
             TimeoutError, subprocess.SubprocessError) as error:
         run.failure_type = type(error).__name__

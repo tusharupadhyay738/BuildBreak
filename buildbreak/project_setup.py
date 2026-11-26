@@ -13,6 +13,12 @@ from . import kane_live
 from .project_import import import_zip, load_project, inspect_project, MAX_ZIP
 
 ROOT = Path(__file__).resolve().parents[1]
+KANE_DEFINITION_CREATION_SUPPORTED = False
+JUDGE_WORKFLOW_BLOCKER = (
+    'Live judge workflow is disabled: Kane testmd run requires an existing *_test.md definition, '
+    '--author reauthors that existing test, and design tests requires a use-case rather than '
+    'creating a local definition from a healthy app. No agent was started.'
+)
 
 
 def prerequisites():
@@ -172,7 +178,7 @@ def register_project_routes(app, require_local_viewer):
                           reason='Book two concert tickets, apply EARLY15 and reload the saved confirmation.')
         elif project_id == 'local-contract-sample':
             record = dict(id=project_id, framework='Static site', adapter='local-contract', compatible=True,
-                          reason='Third-app example using the versioned data-only LOCAL adapter contract.')
+                          reason='Third-app example using the versioned data-only LOCAL adapter contract; imported scripts and server code are never run.')
             project_folder = ROOT / 'examples/local-contract-museum'
         else:
             project_folder, record = load_project(app.config['ARENA_PROJECTS'], project_id)
@@ -190,6 +196,8 @@ def register_project_routes(app, require_local_viewer):
                 test_text=test.decode('utf-8'),
                 test_sha256=hashlib.sha256(test).hexdigest(),
                 test_origin='Generated and automatically checked from the LOCAL contract; no test approval box in the judge workflow.',
+                judge_workflow_available=KANE_DEFINITION_CREATION_SUPPORTED,
+                judge_workflow_blocker=JUDGE_WORKFLOW_BLOCKER,
                 authentication='CLI presence only; authentication and account allowances are checked by the real run.',
                 supported='LOCAL support is limited to declared static assets and one integer in its contract JSON file.',
             )
@@ -211,6 +219,8 @@ def register_project_routes(app, require_local_viewer):
             requirements['node'] = bool(shutil.which('node')) and bool(shutil.which('npm.cmd') or shutil.which('npm'))
         return dict(project=record, prerequisites=requirements, enabled=bool(app.config['ARENA_ENABLE_LIVE_KANE']),
                     test_text=test.decode('utf-8'), test_sha256=hashlib.sha256(test).hexdigest(),
+                    judge_workflow_available=KANE_DEFINITION_CREATION_SUPPORTED,
+                    judge_workflow_blocker=JUDGE_WORKFLOW_BLOCKER,
                     authentication='CLI presence only; authentication and account allowances are checked by the real run.',
                     supported='BreakShop and the recognized SeatPilot export have explicit adapters. Other React apps still require an adapter.')
 
@@ -288,10 +298,13 @@ def register_project_routes(app, require_local_viewer):
     @app.post('/api/judge-workflow')
     def api_judge_workflow_start():
         local_write()
+        if not KANE_DEFINITION_CREATION_SUPPORTED:
+            return app.json.response(error=JUDGE_WORKFLOW_BLOCKER), 409
         from .judge_workflow import GLOBAL_JUDGE_REGISTRY, WorkflowError, execute_judge_workflow
         from .judge_adapters import (
             BreakShopJudgeDriver, LocalContractJudgeDriver, build_judge_agents,
         )
+        from .judge_history import save_judge_record
         data = request.get_json(silent=True)
         if not isinstance(data, dict) or set(data) != {'project_id'} or not isinstance(data['project_id'], str):
             return app.json.response(error='Choose one supported local project.'), 400
@@ -330,7 +343,10 @@ def register_project_routes(app, require_local_viewer):
                 raise WorkflowError('Install or configure the required local tools before starting: ' +
                                     ', '.join(missing) + '.')
             run = GLOBAL_JUDGE_REGISTRY.create(adapter_id)
+            run.persist_callback = lambda record: save_judge_record(
+                app.config['ARENA_DATABASE'], record)
             try:
+                run.persist()
                 driver = driver_factory(run.id)
                 agents = build_judge_agents(driver, show_browser=False)
             except (OSError, RuntimeError, ValueError):
@@ -338,6 +354,7 @@ def register_project_routes(app, require_local_viewer):
                     run.state = 'infrastructure_error'
                     run.result = 'infrastructure_error'
                     run.error = 'Workflow setup failed; inspect private local logs.'
+                run.persist()
                 raise WorkflowError('Judge workflow setup failed; no agents were started.') from None
 
             def execute():
@@ -351,9 +368,19 @@ def register_project_routes(app, require_local_viewer):
                             run.state = 'infrastructure_error'
                             run.result = 'infrastructure_error'
                             run.error = 'Isolated app cleanup failed; no completion is claimed.'
+                        run.persist()
 
             worker = threading.Thread(target=execute, daemon=True)
-            worker.start()
+            try:
+                worker.start()
+            except RuntimeError:
+                driver.close()
+                with run.lock:
+                    run.state = 'infrastructure_error'
+                    run.result = 'infrastructure_error'
+                    run.error = 'Workflow worker did not start; no agents were called.'
+                run.persist()
+                raise WorkflowError('Judge workflow worker could not start.') from None
             return app.json.response(workflow=run.public()), 202
         except (WorkflowError, ValueError, OSError) as error:
             return app.json.response(error=str(error)), 400

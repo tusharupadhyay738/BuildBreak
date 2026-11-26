@@ -66,14 +66,15 @@ class ProjectImportBrowserTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
-        self.app = create_app({
+        self.config = {
             'TESTING': True,
             'DATABASE': str(self.root / 'shop.sqlite3'),
             'ARENA_DATABASE': str(self.root / 'arena.sqlite3'),
             'ARENA_PROJECTS': str(self.root / 'projects'),
             'ARENA_ARTIFACTS': str(self.root / 'artifacts'),
             'ARENA_ENABLE_LIVE_KANE': False,
-        })
+        }
+        self.app = create_app(self.config)
         self.prerequisites = patch(
             'buildbreak.project_setup.prerequisites',
             return_value=dict(kane=False, codex=False, chrome=False, gemini=False),
@@ -149,11 +150,21 @@ class ProjectImportBrowserTests(unittest.TestCase):
         )
 
     def test_new_judge_workflow_requires_fault_decision_without_live_agents(self):
+        expect(self.page.locator('#judge-start')).to_be_disabled()
+        expect(self.page.locator('#judge-status')).to_contain_text(
+            'Kane testmd run requires an existing'
+        )
+        self.page.locator('#project-local-sample').click()
+        expect(self.page.locator('#project-status')).to_contain_text(
+            'LOCAL support is limited to declared static assets and one integer in its contract JSON file'
+        )
+
         preflight = {
             'project': {'id': 'builtin', 'adapter': 'breakshop', 'compatible': True,
                         'reason': 'Offline mocked adapter fixture.'},
             'prerequisites': {'chrome': True, 'kane': True, 'codex': True, 'gemini': True},
             'enabled': True,
+            'judge_workflow_available': True,
             'test_text': 'Synthetic adapter test fixture.',
             'test_sha256': 'fixture-hash',
         }
@@ -212,6 +223,54 @@ class ProjectImportBrowserTests(unittest.TestCase):
         expect(self.page.locator('#judge-proposal')).to_be_hidden()
         expect(self.page.locator('#judge-start')).to_be_disabled()
         self.assertEqual(start_count['value'], 1)
+
+    def test_judge_history_survives_flask_restart_and_stays_separate_from_sample(self):
+        from buildbreak.judge_history import save_judge_record
+
+        now = time.time()
+        save_judge_record(self.config['ARENA_DATABASE'], {
+            'id': 'a' * 32,
+            'adapter': 'local-contract',
+            'created_at': now,
+            'updated_at': now,
+            'state': 'completed',
+            'result': 'completed',
+            'test_sha256': 'c' * 64,
+            'events': [
+                {'state': 'authoring_test', 'message': 'Authoring test', 'at': now},
+                {'state': 'completed', 'message': 'Completed', 'at': now},
+            ],
+            'executions': [{
+                'stage': 'healthy',
+                'attempt': 1,
+                'result': 'passed',
+                'execution_id': '12345678-1234-1234-1234-123456789abc',
+                'evidence_ref': 'd' * 64,
+                'test_sha256': 'c' * 64,
+                'duration': 1.25,
+            }],
+        })
+
+        self.server.shutdown()
+        self.thread.join(timeout=5)
+        self.app = create_app(self.config)
+        self.server = make_server('127.0.0.1', 0, self.app, threaded=True)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.page.goto(f'http://127.0.0.1:{self.server.server_port}/arena')
+
+        expect(self.page.locator('#judge-history')).to_contain_text('completed')
+        expect(self.page.locator('#judge-history')).to_contain_text('Authoring test')
+        expect(self.page.locator('#judge-history')).to_contain_text(
+            '12345678-1234-1234-1234-123456789abc'
+        )
+        expect(self.page.locator('#judge-history')).to_contain_text('d' * 64)
+        expect(self.page.locator('#judge-history')).to_contain_text('c' * 64)
+        expect(self.page.get_by_text(
+            'Showing a fictional UI demo (SAMPLE), not recorded Kane evidence. Your own battles will appear here.',
+            exact=True,
+        )).to_be_visible()
+        self.assertNotIn(str(self.root), self.page.locator('#judge-history').inner_text())
 
 
 if __name__ == '__main__':

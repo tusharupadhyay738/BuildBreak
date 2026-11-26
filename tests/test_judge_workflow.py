@@ -11,8 +11,9 @@ from types import SimpleNamespace
 from buildbreak.battle_runner import ROOT
 from buildbreak.judge_adapters import BreakShopJudgeDriver, LocalContractJudgeDriver
 from buildbreak.judge_workflow import (
-    JudgeRegistry, JudgeRun, WorkflowError, execute_judge_workflow,
+    JudgeRegistry, JudgeRun, RepairRejected, WorkflowError, execute_judge_workflow,
 )
+from buildbreak.judge_history import load_judge_records, save_judge_record
 from buildbreak.site_contract import observe
 
 
@@ -20,10 +21,16 @@ class FakeDriver:
     supported = True
 
     def __init__(self, *, healthy_results=None, broken_result='verification_failed',
+                 repair_results=None, repair_rejections=0, apply_rejections=0,
+                 repair_probe_results=None,
                  test_tamper=False, invalid_test=False, probe_status='changed'):
         self.test = b'locked adapter test'
         self.healthy_results = list(healthy_results or ['passed', 'passed'])
         self.broken_result = broken_result
+        self.repair_results = list(repair_results or ['passed'])
+        self.repair_rejections = repair_rejections
+        self.apply_rejections = apply_rejections
+        self.repair_probe_results = list(repair_probe_results or [True] * 3)
         self.test_tamper = test_tamper
         self.invalid_test = invalid_test
         self.probe_status = probe_status
@@ -35,6 +42,7 @@ class FakeDriver:
         self.gemini_test_seen = None
         self.codex_source_seen = None
         self.codex_evidence_seen = None
+        self.repair_bases = []
 
     def fresh_healthy_copy(self, attempt):
         self.next_copy += 1
@@ -72,8 +80,8 @@ class FakeDriver:
             status = self.broken_result
             evidence = 'broken-evidence'
         else:
-            status = 'passed'
-            evidence = 'repair-evidence'
+            status = self.repair_results.pop(0)
+            evidence = 'repair-evidence-' + str(self.test_runs)
         return dict(result=status, evidence_id=evidence, test_hash=expected_hash,
                     target_url=self.target_for(copy), failure='Expected 4047 cents; observed 4048 cents.')
 
@@ -101,14 +109,24 @@ class FakeDriver:
     def codex_source(self, broken):
         return {'app.py': 'broken app source only'}
 
+    def repair_copy(self, broken, attempt):
+        self.repair_bases.append(broken['id'])
+        return {'id': 'repair-' + str(attempt), 'stage': 'repair', 'attempt': attempt}
+
     def validate_repair(self, broken, repair):
+        if self.repair_rejections:
+            self.repair_rejections -= 1
+            raise RepairRejected('Synthetic candidate rejected by Arena.')
         return repair
 
     def apply_repair(self, broken, repair):
+        if self.apply_rejections:
+            self.apply_rejections -= 1
+            raise RepairRejected('Synthetic apply-stage candidate rejection.')
         broken['stage'] = 'repaired'
 
     def independent_repair_probe(self, broken):
-        return broken['stage'] == 'repaired'
+        return broken['stage'] == 'repaired' and self.repair_probe_results.pop(0)
 
 
 class FakeKane:
@@ -133,20 +151,25 @@ class FakeGemini:
 
 
 class FakeCodex:
-    def __init__(self, driver):
+    def __init__(self, driver, answers=None):
         self.driver = driver
+        self.answers = list(answers or [])
+        self.calls = 0
 
     def repair(self, source, evidence):
+        self.calls += 1
         self.driver.codex_source_seen = source
         self.driver.codex_evidence_seen = evidence
+        if self.answers:
+            return self.answers.pop(0)
         return {'replacement': 'repair from the failed assertion'}
 
 
 class FakeAgents:
-    def __init__(self, driver):
+    def __init__(self, driver, codex_answers=None):
         self.kane = FakeKane(driver)
         self.gemini = FakeGemini(driver)
-        self.codex = FakeCodex(driver)
+        self.codex = FakeCodex(driver, codex_answers)
 
 
 class JudgeWorkflowTests(unittest.TestCase):
@@ -235,6 +258,101 @@ class JudgeWorkflowTests(unittest.TestCase):
         run, agents = self.launch_and_decide(driver, 'approve')
         self.assertEqual(run.state, 'infrastructure_error')
         self.assertIsNone(driver.codex_source_seen)
+
+    def test_codex_gets_three_bounded_attempts_with_arena_and_kane_checks(self):
+        driver = FakeDriver(repair_rejections=1, repair_results=['verification_failed', 'passed'])
+        agents = FakeAgents(driver, codex_answers=[{}, {'replacement': 'first candidate'},
+                                                   {'replacement': 'second candidate'}])
+        run = JudgeRun(adapter_id='fixture')
+        worker = threading.Thread(target=execute_judge_workflow,
+                                  args=(run, driver, agents, 1), daemon=True)
+        worker.start()
+        deadline = time.monotonic() + 2
+        while run.state != 'awaiting_fault_approval' and worker.is_alive() and time.monotonic() < deadline:
+            time.sleep(.005)
+        run.decide(run.proposal_id, 'approve')
+        worker.join(timeout=2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(run.state, 'completed')
+        self.assertEqual(agents.codex.calls, 3)
+        self.assertEqual(len([run for run in run.executions if run['stage'] == 'repair']), 2)
+        self.assertEqual(sum(event['state'] == 'repair_rejected' for event in run.events), 1)
+        self.assertEqual(sum(event['state'] == 'repair_attempt_failed' for event in run.events), 1)
+
+    def test_codex_kane_infrastructure_error_stops_retries_as_infrastructure(self):
+        driver = FakeDriver(repair_results=['infrastructure_error', 'passed'])
+        agents = FakeAgents(driver)
+        run = JudgeRun(adapter_id='fixture')
+        worker = threading.Thread(target=execute_judge_workflow,
+                                  args=(run, driver, agents, 1), daemon=True)
+        worker.start()
+        deadline = time.monotonic() + 2
+        while run.state != 'awaiting_fault_approval' and worker.is_alive() and time.monotonic() < deadline:
+            time.sleep(.005)
+        run.decide(run.proposal_id, 'approve')
+        worker.join(timeout=2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(run.state, 'infrastructure_error')
+        self.assertEqual(agents.codex.calls, 1)
+        self.assertEqual(run.executions[-1]['result'], 'infrastructure_error')
+
+    def test_codex_exhausts_exactly_three_checked_attempts(self):
+        driver = FakeDriver(repair_results=['verification_failed'] * 3)
+        agents = FakeAgents(driver)
+        run = JudgeRun(adapter_id='fixture')
+        worker = threading.Thread(target=execute_judge_workflow,
+                                  args=(run, driver, agents, 1), daemon=True)
+        worker.start()
+        deadline = time.monotonic() + 2
+        while run.state != 'awaiting_fault_approval' and worker.is_alive() and time.monotonic() < deadline:
+            time.sleep(.005)
+        run.decide(run.proposal_id, 'approve')
+        worker.join(timeout=2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(run.state, 'repair_failed')
+        self.assertEqual(agents.codex.calls, 3)
+        self.assertEqual([item['attempt'] for item in run.executions if item['stage'] == 'repair'], [1, 2, 3])
+        self.assertEqual(sum(event['state'] == 'repair_attempt_failed' for event in run.events), 3)
+        self.assertEqual(driver.repair_bases, ['broken-copy'] * 3)
+
+    def test_arena_apply_rejection_is_a_retry_not_an_infrastructure_error(self):
+        driver = FakeDriver(apply_rejections=1)
+        run, agents = self.launch_and_decide(driver, 'approve')
+        self.assertEqual(run.state, 'completed')
+        self.assertEqual(agents.codex.calls, 2)
+        self.assertEqual([item['attempt'] for item in run.executions if item['stage'] == 'repair'], [2])
+        self.assertEqual(sum(event['state'] == 'repair_rejected' for event in run.events), 1)
+
+    def test_history_persists_only_stage_names_and_safe_kane_references(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / 'arena.sqlite3'
+            run = JudgeRun(adapter_id='breakshop')
+            run.persist_callback = lambda record: save_judge_record(database, record)
+            run.emit('repair_rejected', 'private-path-sentinel contains sensitive source')
+            expected_hash = 'a' * 64
+            run.test_sha256 = expected_hash
+            run.record_execution('healthy', 1, {
+                'result': 'passed',
+                'evidence_id': '12345678-1234-1234-1234-123456789abc',
+                'pack_hash': 'b' * 64,
+                'duration': 1.5,
+            }, expected_hash)
+            saved = load_judge_records(database)
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(saved[0]['events'][0]['message'], 'Repair rejected')
+            self.assertNotIn('private-path-sentinel', json.dumps(saved))
+            self.assertEqual(saved[0]['executions'][0]['execution_id'],
+                             '12345678-1234-1234-1234-123456789abc')
+            self.assertEqual(saved[0]['executions'][0]['evidence_ref'], 'b' * 64)
+
+    def test_history_rejects_noncanonical_event_text(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / 'arena.sqlite3'
+            run = JudgeRun(adapter_id='breakshop')
+            record = run.history_record()
+            record['events'] = [{'state': 'created', 'message': 'C:\\private\\path', 'at': time.time()}]
+            with self.assertRaises(ValueError):
+                save_judge_record(database, record)
 
     def test_independent_probe_must_confirm_fault_before_kane_runs(self):
         driver = FakeDriver(probe_status='healthy')
@@ -327,7 +445,9 @@ class BreakShopWorkflowIntegrationTests(unittest.TestCase):
                 run.decide(run.proposal_id, 'approve')
                 worker.join(timeout=30)
                 self.assertFalse(worker.is_alive(), 'offline integration workflow did not finish')
-                self.assertEqual(run.state, 'completed', run.public())
+                self.assertEqual(run.state, 'completed', (
+                    run.public(), getattr(run, 'failure_type', None),
+                    getattr(run, 'failure_reason', None)))
                 self.assertEqual(seen['author_flags'], [True, False, False, False])
                 self.assertEqual(seen['gemini_test'], driver.test_bytes)
                 self.assertEqual(set(seen['codex_source']), {'app.py'})

@@ -101,6 +101,18 @@ def register_arena(app):
     app.config.setdefault('ARENA_ARTIFACTS', str(Path(app.instance_path) / 'battles'))
     with closing(sqlite3.connect(app.config["ARENA_DATABASE"])) as connection:
         connection.executescript(SCHEMA)
+        if not app.config.get('ARENA_ISOLATED_COPY'):
+            from .judge_history import ensure_schema as ensure_judge_schema
+            ensure_judge_schema(connection)
+
+    if app.config.get('ARENA_ISOLATED_COPY'):
+        def judge_history():
+            return []
+    else:
+        from .judge_history import load_judge_records
+
+        def judge_history():
+            return load_judge_records(app.config['ARENA_DATABASE'])
 
     def live_battles():
         with closing(sqlite3.connect(app.config["ARENA_DATABASE"])) as connection:
@@ -168,8 +180,10 @@ def register_arena(app):
         sessions = live_battles()
         selected = request.args.get('battle') or (sessions[0]['id'] if sessions else None)
         hashes = dashboard_generated_hashes(app.config['ARENA_GENERATED_SUITES'])
-        response = app.json.response(console_payload(sessions, app.config['ARENA_ARTIFACTS'],
-                                                     selected, display_time, hashes))
+        payload = console_payload(sessions, app.config['ARENA_ARTIFACTS'],
+                                  selected, display_time, hashes)
+        payload['judgeWorkflows'] = judge_history()
+        response = app.json.response(payload)
         response.headers.update({'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})
         return response
 
@@ -281,8 +295,10 @@ def register_arena(app):
         generated_suites = generated_suite_cards(app.config['ARENA_GENERATED_SUITES'], sessions)
         hashes = dashboard_generated_hashes(app.config['ARENA_GENERATED_SUITES'])
         attach_screenshots(sessions, selected)
+        payload = console_payload(sessions, app.config['ARENA_ARTIFACTS'],
+                                  selected, display_time, hashes)
+        payload['judgeWorkflows'] = judge_history()
         return render_template("arena.html", battle=battle, runs=runs, evidence=evidence, sessions=sessions,
                                generated_suites=generated_suites,
                                selected_id=selected, scores=summarize(sessions),
-                               console_payload=console_payload(sessions, app.config['ARENA_ARTIFACTS'],
-                                                               selected, display_time, hashes))
+                               console_payload=payload)

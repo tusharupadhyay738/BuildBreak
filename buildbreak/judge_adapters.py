@@ -12,7 +12,7 @@ from .fault_validator import (
     json_command, patch_details, protected, validate_fault,
 )
 from .gemini_breaker import PATCH_SCHEMA, generate_json
-from .judge_workflow import WorkflowError
+from .judge_workflow import RepairRejected, WorkflowError
 from . import site_contract
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -198,14 +198,32 @@ class BreakShopJudgeDriver:
     def codex_source(self, broken):
         return {'app.py': (broken['workspace'] / 'app.py').read_text(encoding='utf-8')}
 
+    def repair_copy(self, broken, attempt):
+        workspace = self.private / ('repair-' + str(attempt))
+        battle_runner.snapshot(broken['workspace'], workspace)
+        test_path = workspace / BREAKSHOP_TEST
+        test_path.parent.mkdir(parents=True, exist_ok=True)
+        test_path.write_bytes(self.test_bytes)
+        self.test_paths.append(test_path)
+        protected(workspace, self.manifest, allow_app=True)
+        artifacts = self.private / ('repair-run-' + str(attempt))
+        artifacts.mkdir()
+        return self._start_copy('repair-' + str(attempt), workspace, artifacts, 'repair')
+
     def validate_repair(self, broken, repair):
         current = (broken['workspace'] / 'app.py').read_text(encoding='utf-8')
-        return battle_runner.validate_repair(repair, current)
+        try:
+            return battle_runner.validate_repair(repair, current)
+        except battle_runner.RejectedRepair as error:
+            raise RepairRejected(str(error)) from None
 
     def apply_repair(self, broken, candidate):
         (broken['workspace'] / 'app.py').write_text(candidate, encoding='utf-8')
         broken['stage'] = 'repaired'
-        protected(broken['workspace'], self.manifest, allow_app=True)
+        try:
+            protected(broken['workspace'], self.manifest, allow_app=True)
+        except ValueError as error:
+            raise RepairRejected(str(error)) from None
 
     def independent_repair_probe(self, broken):
         unit_artifacts = broken['artifacts'] / 'repair-unit-tests'
@@ -400,21 +418,36 @@ class LocalContractJudgeDriver:
         data = (broken['workspace'] / name).read_text(encoding='utf-8')
         return {name: data}
 
+    def repair_copy(self, broken, attempt):
+        workspace = self.private / ('repair-' + str(attempt))
+        site = site_contract.save_site(broken['workspace'], workspace)
+        test_path = workspace / self.test_path
+        test_path.parent.mkdir(parents=True, exist_ok=True)
+        test_path.write_bytes(self.test_bytes)
+        self.test_paths.append(test_path)
+        artifacts = self.private / ('repair-run-' + str(attempt))
+        artifacts.mkdir()
+        copy = {'id': 'repair-' + str(attempt), 'workspace': workspace, 'site': site,
+                'artifacts': artifacts, 'stage': 'repair'}
+        self._start_server(copy)
+        self.copies.append(copy)
+        return copy
+
     def validate_repair(self, broken, repair):
         name = 'site/' + self.base_site.data_file
         if not isinstance(repair, dict) or set(repair) != {'content'} or not isinstance(repair['content'], str):
-            raise WorkflowError('LOCAL Codex repair must return only the contracted JSON file.')
+            raise RepairRejected('LOCAL Codex repair must return only the contracted JSON file.')
         try:
             value = json.loads(repair['content'])
         except (json.JSONDecodeError, RecursionError):
-            raise WorkflowError('LOCAL Codex repair is not valid JSON.') from None
+            raise RepairRejected('LOCAL Codex repair is not valid JSON.') from None
         current = broken['site'].data
         if (not isinstance(value, dict) or set(value) != set(current)
                 or value.get(self.base_site.field) != self.base_site.data[self.base_site.field]):
-            raise WorkflowError('LOCAL repair did not restore the declared behavior without unrelated data edits.')
+            raise RepairRejected('LOCAL repair did not restore the declared behavior without unrelated data edits.')
         for key in current:
             if key != self.base_site.field and value[key] != current[key]:
-                raise WorkflowError('LOCAL repair changed a field outside the adapter contract.')
+                raise RepairRejected('LOCAL repair changed a field outside the adapter contract.')
         return json.dumps(value, indent=2, ensure_ascii=False).encode('utf-8') + b'\n'
 
     def apply_repair(self, broken, candidate):

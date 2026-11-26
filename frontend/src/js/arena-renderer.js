@@ -1098,7 +1098,34 @@ export function renderBattleFilterBar({ payload, outcomeFilter, counts, filtered
   `;
 }
 
-function renderProjectSetup() {
+function renderJudgeHistory(records) {
+  const workflows = Array.isArray(records) ? records.slice(0, 10) : [];
+  const entries = workflows.map((workflow) => {
+    const events = Array.isArray(workflow.events) ? workflow.events : [];
+    const executions = Array.isArray(workflow.executions) ? workflow.executions : [];
+    return `<article class="rounded border border-slate-200 p-3 space-y-2" data-judge-workflow="${escapeHtml(workflow.id || '')}">
+      <div class="flex flex-wrap justify-between gap-2 text-xs">
+        <strong>${escapeHtml(workflow.result || workflow.state || 'unknown')}</strong>
+        <span>${escapeHtml(workflow.adapter || 'unknown adapter')}</span>
+      </div>
+      <p class="break-all font-mono text-[10px] text-slate-500">Test SHA-256: ${escapeHtml(workflow.test_sha256 || 'not recorded')}</p>
+      <ol class="list-decimal pl-5 text-xs text-slate-600 space-y-1">
+        ${events.map((event) => `<li><strong>${escapeHtml(event.state || 'stage')}</strong>: ${escapeHtml(event.message || '')}</li>`).join('')}
+      </ol>
+      <ul class="space-y-1 text-xs text-slate-600">
+        ${executions.map((execution) => `<li>Kane ${escapeHtml(execution.stage || 'execution')} ${escapeHtml(execution.attempt || '')}: ${escapeHtml(execution.result || 'unknown')}
+          · Execution ID: ${escapeHtml(execution.execution_id || 'not recorded')}
+          · Evidence SHA-256: ${escapeHtml(execution.evidence_ref || 'not recorded')}</li>`).join('')}
+      </ul>
+    </article>`;
+  });
+  return `<section id="judge-history" class="rounded-lg border border-slate-200 bg-white p-4 space-y-2" aria-label="Persistent judge workflow history">
+    <h3 class="text-sm font-semibold text-slate-900">Judge workflow history</h3>
+    ${entries.length ? entries.join('') : '<p class="text-xs text-slate-600">No judge workflow results recorded.</p>'}
+  </section>`;
+}
+
+function renderProjectSetup(judgeWorkflows = []) {
   return `<section id="project-setup-panel" class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
     <h2 class="font-display text-lg font-semibold text-slate-900">Start a full battle</h2>
     <p class="text-sm text-slate-600">Choose a demo to see what Kane will check, or import a supported source ZIP.</p>
@@ -1157,8 +1184,8 @@ function renderProjectSetup() {
     <p class="text-xs text-slate-500">Baseline → Gemini/controlled fault → Arena validation → Kane → Codex (up to 3 attempts) → Kane. Imported code never runs before approval. Source exports, keys and evidence stay local. CLI authentication and credit availability are checked during execution.</p>
     <div class="rounded-lg border border-slate-300 p-4 space-y-3" aria-labelledby="judge-workflow-heading">
       <div>
-        <h3 id="judge-workflow-heading" class="text-sm font-semibold text-slate-900">New judge workflow · test-targeted challenge</h3>
-        <p class="mt-1 text-xs text-slate-600">Arena supplies a versioned test definition bounded by the adapter contract; Kane records and runs its browser steps on the first healthy copy. Arena checks and locks the target, permitted actions, assertions and hash, then requires two passes on fresh healthy copies. No human test-approval step is used here; you must approve or reject the exact proposed fault diff before it can be applied. One workflow is allowed per Arena process.</p>
+        <h3 id="judge-workflow-heading" class="text-sm font-semibold text-slate-900">Test-targeted judge workflow</h3>
+        <p class="mt-1 text-xs text-slate-600">Live execution is blocked until Kane can create a local browser-test definition from a healthy app without a manual test-review step. The installed CLI’s <code>testmd run --author</code> reauthors an existing test; <code>design tests</code> requires an existing use-case. Arena will not substitute an adapter-authored test or call an agent. The status below explains the blocker.</p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <button id="judge-start" type="button" disabled class="rounded bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Start judge workflow</button>
@@ -1176,6 +1203,7 @@ function renderProjectSetup() {
         </div>
       </div>
     </div>
+    ${renderJudgeHistory(judgeWorkflows)}
   </section>`;
 }
 
@@ -1270,7 +1298,8 @@ export function renderArenaDashboard(state) {
   } = state;
 
   const parts = [renderWorkspaceBanner(payload, activePreviewKey),
-    ...(activePreviewKey === 'archive' || payload.autoSample ? [renderProjectSetup()] : [])];
+    ...(activePreviewKey === 'archive' || payload.autoSample
+      ? [renderProjectSetup(payload.judgeWorkflows)] : [])];
 
   if (payload.status === 'loading') {
     parts.push(renderLoadingState());

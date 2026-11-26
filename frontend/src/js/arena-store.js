@@ -22,6 +22,7 @@ export function applySampleReplay(payload) {
   sample.notice = payload.notice || EMPTY_ARCHIVE_SAMPLE_NOTICE;
   sample.dataSourceLabel = 'Fictional UI demo (SAMPLE)';
   sample.autoSample = true;
+  sample.judgeWorkflows = Array.isArray(payload.judgeWorkflows) ? payload.judgeWorkflows : [];
   return sample;
 }
 

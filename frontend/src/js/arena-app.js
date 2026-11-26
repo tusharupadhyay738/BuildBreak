@@ -868,7 +868,7 @@ export function initArenaDashboard() {
     const missing = ['chrome', 'kane', 'codex', 'gemini'].filter((name) => !requirements[name]);
     if (projectInfo?.project?.adapter === 'local-contract' && !requirements.playwright) missing.push('playwright');
     const unavailable = !projectInfo || projectInfo.project.id !== selectedProject ||
-      !supported || !projectInfo.enabled || missing.length > 0;
+      !supported || !projectInfo.enabled || !projectInfo.judge_workflow_available || missing.length > 0;
     button.disabled = Boolean(judgeStarted || judgeRunId || unavailable);
     const label = document.getElementById('judge-project-label');
     if (label) {
@@ -878,6 +878,9 @@ export function initArenaDashboard() {
     }
     if (judgeStarted && !judgeRunId) {
       projectText('judge-status', 'This Arena process has already used its one judge workflow slot.');
+    } else if (supported && projectInfo && !projectInfo.judge_workflow_available) {
+      projectText('judge-status', projectInfo.judge_workflow_blocker ||
+        'Live judge workflow is blocked because Kane cannot create the required local test definition.');
     } else if (!supported && projectInfo) {
       projectText('judge-status', 'This app has no supported judge adapter. Choose BreakShop or a valid LOCAL static-data contract.');
     } else if (projectInfo && !projectInfo.enabled) {
@@ -1019,7 +1022,10 @@ export function initArenaDashboard() {
         ? `Runnable adapter: ${data.project.adapter === 'breakshop' ? 'BreakShop' :
           data.project.adapter === 'local-contract' ? 'LOCAL static-data contract' : 'SeatPilot'}.`
         : 'Inspection only: no runnable adapter.';
-      projectText('project-status', `${imported ? 'Import complete. ' : ''}${adapter} ${data.project.reason}`);
+      const localScope = data.project.adapter === 'local-contract' && data.supported
+        ? ` Supported scope: ${data.supported}` : '';
+      projectText('project-status',
+        `${imported ? 'Import complete. ' : ''}${adapter} ${data.project.reason}${localScope}`);
       projectText('project-test', data.project.compatible ? data.test_text : 'No test approved. A project-specific adapter is required.');
       projectText('project-test-origin', !data.project.compatible
         ? 'No approved test is available for this inspection-only import.'

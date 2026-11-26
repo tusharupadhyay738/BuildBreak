@@ -15,13 +15,21 @@ imported server, or execute imported source on the host. A trusted local server
 serves the static files and one controlled JSON field. Browser requests are
 restricted to that server; external network access is blocked.
 
-`Arena` creates the bounded test definition from the contract. Kane authors the
-browser recording on the first healthy run. Arena validates its local target,
-allowed navigate/click/read actions, exact visible assertion and SHA-256, then
-requires two distinct passes on fresh app copies before Gemini is called.
-Gemini can propose only one JSON integer change to the declared field. The local
-operator must approve that exact diff; rejection, timeout, or no response stops
-the flow without applying a change.
+Live judge execution is currently disabled. The installed Kane CLI help shows
+that `testmd run` runs an existing `*_test.md` and `--author` reauthors that
+existing test; `design tests` requires an existing use-case. It does not
+document a noninteractive command that creates a local browser-test definition
+from a healthy app without a manual test-review step. Arena therefore refuses
+to start the live workflow and does not substitute an adapter-authored test.
+
+Offline mocked-agent fixtures exercise the remaining gates using synthetic,
+adapter-supplied test definitions. They do not prove Kane-authored test
+creation or live execution. They cover Arena validation of the local target,
+permitted actions, assertion and SHA-256, two passes on fresh app copies,
+explicit operator approval, and up to three Arena-checked Codex attempts with
+Kane reverification. Rejection or timeout applies no fault. Persistent history
+stores stages, verdicts and validated Kane/evidence references only, not source,
+diffs, raw evidence or private paths. These fixture results are synthetic.
 
 The included [Museum Exhibit Price Card](../../examples/local-contract-museum/)
 is a small third app, independent of BreakShop and SeatPilot. Completing its
