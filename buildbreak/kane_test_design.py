@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+from urllib.parse import urlsplit
 
 from .process_control import run
 from .site_contract import read_site
@@ -67,6 +68,56 @@ def validate_generated_test(site, data):
         if re.search(r'\b(if present|if available|if it exists|when present|optionally)\b',
                      text, re.I):
             raise DesignError('Kane test makes the required control action optional.')
+
+
+def bind_start_url(data, url):
+    """Bind only the start URL in a disposable test copy; retain source bytes."""
+    parsed = urlsplit(url)
+    if (parsed.scheme != 'http' or parsed.hostname != '127.0.0.1'
+            or not parsed.port or parsed.username or parsed.password
+            or parsed.path not in ('', '/') or parsed.query or parsed.fragment):
+        raise DesignError('Expected an owned loopback URL for the private copy.')
+    marker = b'{{start_url}}'
+    if data.count(marker) != 1:
+        raise DesignError('Kane test must contain exactly one start URL marker.')
+    return data.replace(marker, url.encode('ascii'))
+
+
+def verify_healthy_trace(lines, url, site):
+    """Require the recorded browser page, click and exact check, not a status alone."""
+    events = []
+    try:
+        for line in lines.splitlines():
+            if line.strip():
+                events.append(json.loads(line))
+    except (ValueError, TypeError):
+        raise DesignError('Kane trace was not valid NDJSON.') from None
+    done = [event for event in events if event.get('type') == 'test_md_done']
+    actions = [event for event in events if event.get('type') == 'step_event']
+    page_seen = any(event.get('event') == 'screenshot'
+                    and urlsplit(str(event.get('detail', ''))).netloc == urlsplit(url).netloc
+                    for event in actions)
+    navigation_seen = any(event.get('event') == 'action'
+                          and event.get('action_type') == 'navigate'
+                          and event.get('success') is True
+                          and url in str(event.get('detail', ''))
+                          for event in actions)
+    click_seen = not site.click_id or any(
+        event.get('event') == 'action' and event.get('action_type') == 'click'
+        and event.get('success') is True
+        and (site.click_id in str(event.get('detail', ''))
+             or site.click_id.replace('-', ' ').casefold()
+             in str(event.get('detail', '')).casefold())
+        for event in actions)
+    check_seen = any(event.get('type') == 'step_end'
+                     and event.get('kind') == 'assert'
+                     and event.get('status') == 'passed'
+                     and site.result_id in str(event.get('summary', ''))
+                     and site.expected in str(event.get('summary', ''))
+                     for event in events)
+    if (len(done) != 1 or done[0].get('overall_status') != 'passed'
+            or not page_seen or not navigation_seen or not click_seen or not check_seen):
+        raise DesignError('Kane did not prove the target page, required click and passing check.')
 
 
 def design_local_test(source, workspace, executable, invoke=None):

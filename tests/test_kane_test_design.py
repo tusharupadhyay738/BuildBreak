@@ -1,11 +1,13 @@
 """Offline contract tests for the unlaunched Kane design path."""
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
 from types import SimpleNamespace
 
-from buildbreak.kane_test_design import DesignError, design_local_test, validate_generated_test
+from buildbreak.kane_test_design import (DesignError, bind_start_url, design_local_test,
+                                         validate_generated_test, verify_healthy_trace)
 from buildbreak.site_contract import read_site
 
 
@@ -82,6 +84,42 @@ class KaneDesignTests(unittest.TestCase):
                    b'Click show-entry-price and observe the page.\n')
         with self.assertRaisesRegex(DesignError, 'exact result assertion'):
             validate_generated_test(site, content)
+
+    def test_bind_start_url_only_in_disposable_bytes(self):
+        source = b'## Step 1\nOpen {{start_url}}.\n'
+        bound = bind_start_url(source, 'http://127.0.0.1:61234')
+        self.assertIn(b'http://127.0.0.1:61234', bound)
+        self.assertIn(b'{{start_url}}', source)
+        with self.assertRaises(DesignError):
+            bind_start_url(source, 'https://example.com')
+        with self.assertRaisesRegex(DesignError, 'exactly one'):
+            bind_start_url(source + source, 'http://127.0.0.1:61234')
+
+    def test_trace_requires_target_click_and_passing_check(self):
+        site = read_site(SOURCE)
+        url = 'http://127.0.0.1:61234'
+        def trace(page, click):
+            return '\n'.join(json.dumps(event) for event in [
+                {'type': 'step_event', 'event': 'screenshot', 'detail': page},
+                {'type': 'step_event', 'event': 'action', 'action_type': 'navigate',
+                 'success': True, 'detail': 'Navigate to ' + url},
+                {'type': 'step_event', 'event': 'action', 'action_type': 'click',
+                 'success': click, 'detail': 'Click Show entry price'},
+                {'type': 'step_end', 'kind': 'assert', 'status': 'passed',
+                 'summary': 'entry-price has rendered text exactly $18.00'},
+                {'type': 'test_md_done', 'overall_status': 'passed'},
+            ])
+        verify_healthy_trace(trace(url, True), url, site)
+        for page, click in [('https://kaneai-playground.lambdatest.io', True),
+                            (url, False)]:
+            with self.assertRaisesRegex(DesignError, 'did not prove'):
+                verify_healthy_trace(trace(page, click), url, site)
+        with self.assertRaisesRegex(DesignError, 'did not prove'):
+            verify_healthy_trace(trace(url, True).replace('"kind": "assert"',
+                                                      '"kind": "analyze"'), url, site)
+        with self.assertRaisesRegex(DesignError, 'did not prove'):
+            verify_healthy_trace(trace(url, True).replace('"action_type": "navigate"',
+                                                      '"action_type": "wait"'), url, site)
 
 
 if __name__ == '__main__':

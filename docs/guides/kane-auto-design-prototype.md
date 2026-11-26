@@ -37,6 +37,17 @@ check. The source test remained unchanged. Future qualification must verify the
 actual target URL, required click and exact assertion from the trace, alongside
 two passes, before counting a test as kept.
 
+## Corrected design and healthy checks
+
+A second, fresh design attempt produced a mandatory-click test. Two independent
+healthy Kane runs reached the fictional Museum page, clicked the price control,
+passed the exact `$18.00` assertion, and yielded validated sealed packs. Arena
+bound the start URL into private test copies because Kane had navigated to the
+literal placeholder in the first attempt. The original test was unchanged.
+See [the recorded run account](../evidence/museum-generated-healthy.md) for
+identifiers, credit use, and limits. The judge launch remains disabled until
+the runtime binding and trace gate are integrated into that path.
+
 The one capped live design invocation, after ingest and extraction yield a
 single actual use-case ID, is:
 
