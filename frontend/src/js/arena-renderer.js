@@ -1121,6 +1121,7 @@ function renderProjectSetup() {
       <button id="project-seatpilot" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Try SeatPilot ticket booking</button>
       <button id="project-generated" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">SeatPilot generated suite</button>
       <button id="project-builtin" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Use built-in BreakShop</button>
+      <button id="project-local-sample" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Try LOCAL contract example</button>
       <input id="project-zip" type="file" accept=".zip,application/zip" aria-label="Project source ZIP" class="text-sm text-slate-700">
       <button id="project-import" type="button" class="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Import ZIP</button>
     </div>
@@ -1154,6 +1155,27 @@ function renderProjectSetup() {
     </div>
     <p id="project-next" aria-live="polite" class="text-sm text-slate-600"></p>
     <p class="text-xs text-slate-500">Baseline → Gemini/controlled fault → Arena validation → Kane → Codex (up to 3 attempts) → Kane. Imported code never runs before approval. Source exports, keys and evidence stay local. CLI authentication and credit availability are checked during execution.</p>
+    <div class="rounded-lg border border-slate-300 p-4 space-y-3" aria-labelledby="judge-workflow-heading">
+      <div>
+        <h3 id="judge-workflow-heading" class="text-sm font-semibold text-slate-900">New judge workflow · test-targeted challenge</h3>
+        <p class="mt-1 text-xs text-slate-600">Arena supplies a versioned test definition bounded by the adapter contract; Kane records and runs its browser steps on the first healthy copy. Arena checks and locks the target, permitted actions, assertions and hash, then requires two passes on fresh healthy copies. No human test-approval step is used here; you must approve or reject the exact proposed fault diff before it can be applied. One workflow is allowed per Arena process.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="judge-start" type="button" disabled class="rounded bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Start judge workflow</button>
+        <span id="judge-project-label" class="text-xs text-slate-600">Selected app: BreakShop</span>
+      </div>
+      <p id="judge-status" role="status" aria-live="polite" class="text-sm text-slate-700">Select a supported app and check local setup to begin.</p>
+      <ol id="judge-events" class="list-decimal pl-5 text-xs text-slate-600 space-y-1"></ol>
+      <div id="judge-proposal" hidden class="rounded border border-amber-300 bg-amber-50 p-3 space-y-2">
+        <h4 class="text-sm font-semibold text-amber-950">Operator decision required · no fault applied yet</h4>
+        <p id="judge-fault-description" class="text-sm text-slate-800"></p>
+        <pre id="judge-fault-diff" class="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-white p-3 font-mono text-xs text-slate-800"></pre>
+        <div class="flex flex-wrap gap-2">
+          <button id="judge-approve-fault" type="button" class="rounded bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Approve fault</button>
+          <button id="judge-reject-fault" type="button" class="rounded border border-slate-400 px-3 py-2 text-xs font-semibold text-slate-800">Reject fault</button>
+        </div>
+      </div>
+    </div>
   </section>`;
 }
 

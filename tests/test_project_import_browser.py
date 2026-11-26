@@ -148,6 +148,71 @@ class ProjectImportBrowserTests(unittest.TestCase):
             "Arena's Flask API is unavailable. Open http://127.0.0.1:5000/arena and try again."
         )
 
+    def test_new_judge_workflow_requires_fault_decision_without_live_agents(self):
+        preflight = {
+            'project': {'id': 'builtin', 'adapter': 'breakshop', 'compatible': True,
+                        'reason': 'Offline mocked adapter fixture.'},
+            'prerequisites': {'chrome': True, 'kane': True, 'codex': True, 'gemini': True},
+            'enabled': True,
+            'test_text': 'Synthetic adapter test fixture.',
+            'test_sha256': 'fixture-hash',
+        }
+        self.page.route('**/api/projects/builtin/preflight', lambda route: route.fulfill(
+            status=200, content_type='application/json', body=json.dumps(preflight)))
+        self.page.reload()
+        expect(self.page.locator('#judge-start')).to_be_enabled()
+        start_count = {'value': 0}
+
+        def start_workflow(route):
+            start_count['value'] += 1
+            route.fulfill(status=202, content_type='application/json', body=json.dumps({
+                'workflow': {
+                    'id': 'offline-test-run', 'adapter': 'breakshop', 'state': 'authoring_test',
+                    'result': '', 'test_sha256': '', 'fault_description': '', 'fault_diff': '',
+                    'proposal_id': '', 'events': [{'state': 'authoring_test',
+                        'message': 'Synthetic test authoring fixture.'}], 'error': '',
+                },
+            }))
+
+        self.page.route('**/api/judge-workflow', start_workflow)
+
+        pending = {
+            'id': 'offline-test-run', 'adapter': 'breakshop', 'state': 'awaiting_fault_approval',
+            'result': '', 'test_sha256': 'fixture-hash',
+            'fault_description': 'Synthetic bounded fault fixture.',
+            'fault_diff': '--- a/app.py\\n+++ b/app.py\\n@@ -1 +1 @@\\n-expected\\n+changed',
+            'proposal_id': 'offline-proposal', 'events': [{'state': 'awaiting_fault_approval',
+                'message': 'Review the synthetic fault fixture.'}], 'error': '',
+        }
+        rejected = {
+            **pending, 'state': 'fault_rejected', 'result': 'fault_rejected',
+            'fault_description': '', 'fault_diff': '', 'proposal_id': '',
+            'events': [{'state': 'fault_rejected', 'message': 'Synthetic rejection; no fault applied.'}],
+        }
+        workflow_state = {'value': pending}
+
+        def read_workflow(route):
+            route.fulfill(status=200, content_type='application/json',
+                          body=json.dumps({'workflow': workflow_state['value']}))
+
+        def decide_workflow(route):
+            workflow_state['value'] = rejected
+            route.fulfill(status=200, content_type='application/json', body=json.dumps({
+                'workflow': rejected,
+            }))
+
+        self.page.route('**/api/judge-workflow/offline-test-run/decision', decide_workflow)
+        self.page.route('**/api/judge-workflow/offline-test-run', read_workflow)
+
+        self.page.locator('#judge-start').click()
+        expect(self.page.locator('#judge-fault-description')).to_have_text('Synthetic bounded fault fixture.')
+        expect(self.page.locator('#judge-fault-diff')).to_contain_text('+changed')
+        self.page.locator('#judge-reject-fault').click()
+        expect(self.page.locator('#judge-status')).to_contain_text('fault rejected')
+        expect(self.page.locator('#judge-proposal')).to_be_hidden()
+        expect(self.page.locator('#judge-start')).to_be_disabled()
+        self.assertEqual(start_count['value'], 1)
+
 
 if __name__ == '__main__':
     unittest.main()

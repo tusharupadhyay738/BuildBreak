@@ -211,6 +211,52 @@ class ProjectSetupTests(unittest.TestCase):
             self.assertTrue(response.json['project']['compatible'])
             start.assert_not_called()
 
+    def test_local_contract_zip_is_preflighted_without_running_extra_scripts(self):
+        example = ROOT / 'examples' / 'local-contract-museum'
+        files = {
+            'museum/' + path.relative_to(example).as_posix(): path.read_bytes()
+            for path in example.rglob('*') if path.is_file()
+        }
+        files['museum/setup.py'] = b"raise RuntimeError('imported scripts must never run')\n"
+        with patch('buildbreak.project_setup.prerequisites',
+                   return_value=dict(kane=True, codex=True, chrome=True, gemini=True)), \
+             patch('buildbreak.project_setup.start_battle') as start:
+            response = self.client.post('/api/projects/import', headers=self.headers,
+                                        data={'project': (archive(files), 'museum.zip')})
+            self.assertEqual(response.status_code, 200)
+            project = response.json['project']
+            self.assertEqual(project['adapter'], 'local-contract')
+            self.assertTrue(project['compatible'])
+            preflight = self.client.get('/api/projects/' + project['id'] + '/preflight')
+            self.assertEqual(preflight.status_code, 200)
+            self.assertEqual(preflight.json['test_origin'],
+                             'Generated and automatically checked from the LOCAL contract; no test approval box in the judge workflow.')
+            self.assertIn('Museum Exhibit Price Card', preflight.json['test_text'])
+            launch = self.client.post('/api/projects/' + project['id'] + '/battle',
+                json=dict(approved=True, breaker='scripted', test_sha256=preflight.json['test_sha256']),
+                headers=self.headers)
+            self.assertEqual(launch.status_code, 400)
+            self.assertIn('separate judge workflow', launch.json['error'])
+            start.assert_not_called()
+
+    def test_judge_workflow_route_validates_before_any_agent_or_driver_starts(self):
+        with patch('buildbreak.judge_adapters.build_judge_agents') as build_agents:
+            response = self.client.post('/api/judge-workflow', json={}, headers=self.headers)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json['error'], 'Choose one supported local project.')
+        build_agents.assert_not_called()
+
+    def test_isolated_app_copy_does_not_expose_judge_workflow_routes(self):
+        isolated = create_app({
+            **self.config,
+            'DATABASE': str(self.root / 'isolated-shop.sqlite3'),
+            'ARENA_DATABASE': str(self.root / 'isolated-arena.sqlite3'),
+            'ARENA_ISOLATED_COPY': True,
+        })
+        response = isolated.test_client().post('/api/judge-workflow', json={'project_id': 'builtin'},
+                                               headers=self.headers)
+        self.assertEqual(response.status_code, 404)
+
     def test_runner_callbacks_preserve_closed_loop_and_redirect_history(self):
         project = self.root / 'project'
         snapshot(ROOT, project)

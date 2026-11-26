@@ -25,6 +25,16 @@ def private_file(path):
 
 def inspect_project(folder, canonical):
     """Only the known app logic is supported; framework detection is not support."""
+    contract = folder / 'arena.json'
+    if contract.is_file():
+        from .site_contract import read_site
+        try:
+            site = read_site(folder)
+        except (OSError, ValueError, TypeError):
+            return dict(framework='Static site', adapter=None, compatible=False,
+                        reason='LOCAL adapter contract is invalid. No imported scripts or server code were run.')
+        return dict(framework='Static site', adapter='local-contract', compatible=True,
+                    reason=f'LOCAL data-only adapter for {site.name}. Only declared static assets and one JSON field are supported; no ZIP scripts run.')
     app = folder / 'app.py'
     if app.is_file():
         try:

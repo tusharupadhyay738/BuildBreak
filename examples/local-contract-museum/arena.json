@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "Museum Exhibit Price Card",
+  "assets": [
+    "index.html",
+    "styles.css",
+    "app.js",
+    "offer.json"
+  ],
+  "data_file": "offer.json",
+  "field": "price_cents",
+  "result_id": "entry-price",
+  "expected_text": "$18.00",
+  "click_id": "show-entry-price"
+}

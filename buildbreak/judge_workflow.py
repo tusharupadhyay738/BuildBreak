@@ -61,7 +61,14 @@ class JudgeRun:
                     or self.decision or time.monotonic() >= self.approval_deadline):
                 raise WorkflowError('There is no matching pending fault approval.')
             self.decision = decision
+            self.state = 'fault_decision_received'
             self.updated_at = time.time()
+            self.events.append({
+                'state': self.state,
+                'message': 'Operator approved the proposed fault.' if decision == 'approve'
+                           else 'Operator rejected the proposed fault.',
+                'at': self.updated_at,
+            })
             self.decision_ready.set()
 
     def public(self):
@@ -81,7 +88,7 @@ class JudgeRun:
 
 
 class JudgeRegistry:
-    """Keep only one active live workflow; history remains in the legacy archive."""
+    """Keep a single capped workflow per process; legacy history remains untouched."""
 
     def __init__(self):
         self._runs = {}
@@ -89,8 +96,8 @@ class JudgeRegistry:
 
     def create(self, adapter_id):
         with self._lock:
-            if any(run.state not in TERMINAL_STATES for run in self._runs.values()):
-                raise WorkflowError('A judge workflow is already active.')
+            if self._runs:
+                raise WorkflowError('This Arena process is capped at one judge workflow.')
             run = JudgeRun(adapter_id=adapter_id)
             self._runs[run.id] = run
             return run
@@ -109,6 +116,9 @@ class JudgeRegistry:
     def runs(self):
         with self._lock:
             return tuple(self._runs.values())
+
+
+GLOBAL_JUDGE_REGISTRY = JudgeRegistry()
 
 
 def _validate_test(driver, test_bytes, copy):
@@ -172,7 +182,7 @@ def execute_judge_workflow(run, driver, agents, approval_timeout=120):
         raise ValueError('Fault approval timeout must be positive.')
 
     try:
-        run.emit('authoring_test', 'Kane is authoring the adapter-bounded browser test.')
+        run.emit('authoring_test', 'Kane is recording the adapter-bounded browser test.')
         first_copy = driver.fresh_healthy_copy(1)
         test_bytes = driver.test_definition(first_copy)
         contract = _validate_test(driver, test_bytes, first_copy)
@@ -285,7 +295,9 @@ def execute_judge_workflow(run, driver, agents, approval_timeout=120):
         return _set_terminal(run, 'completed',
                              'Arena checked the repair and Kane passed the unchanged locked test.')
     except (WorkflowError, OSError, RuntimeError, ValueError, TypeError, KeyError,
-            TimeoutError, subprocess.SubprocessError):
+            TimeoutError, subprocess.SubprocessError) as error:
+        run.failure_type = type(error).__name__
+        run.failure_reason = str(error)
         return _set_terminal(run, 'infrastructure_error',
                              'Workflow stopped on an infrastructure or validation error; inspect private local logs.',
                              'Workflow execution failed; details are not exposed in the dashboard.')

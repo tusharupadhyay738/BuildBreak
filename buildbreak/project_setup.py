@@ -38,6 +38,8 @@ def prerequisites():
 
 def prepare_source(folder, record, destination):
     from .battle_runner import snapshot
+    if record.get('adapter') == 'local-contract':
+        raise ValueError('LOCAL projects use the data-only judge adapter; imported scripts are never started.')
     source = folder / 'source'
     if not record['compatible'] or not inspect_project(source, ROOT)['compatible']:
         raise ValueError('This source does not have a supported battle adapter.')
@@ -161,14 +163,36 @@ def register_project_routes(app, require_local_viewer):
             abort(403)
 
     def preflight(project_id):
+        project_folder = None
         if project_id == 'builtin':
             record = dict(id='builtin', framework='Flask', adapter='breakshop', compatible=True,
                           reason='Built-in BreakShop demo with a validated adapter.')
         elif project_id in {'seatpilot','seatpilot-generated'}:
             record = dict(id='seatpilot', framework='SeatPilot', adapter='seatpilot', compatible=True,
                           reason='Book two concert tickets, apply EARLY15 and reload the saved confirmation.')
+        elif project_id == 'local-contract-sample':
+            record = dict(id=project_id, framework='Static site', adapter='local-contract', compatible=True,
+                          reason='Third-app example using the versioned data-only LOCAL adapter contract.')
+            project_folder = ROOT / 'examples/local-contract-museum'
         else:
-            _, record = load_project(app.config['ARENA_PROJECTS'], project_id)
+            project_folder, record = load_project(app.config['ARENA_PROJECTS'], project_id)
+            project_folder = project_folder / 'source'
+        if record.get('adapter') == 'local-contract':
+            from .site_contract import read_site
+            site = read_site(project_folder)
+            test = site.test()
+            requirements = prerequisites()
+            from importlib.util import find_spec
+            requirements['playwright'] = find_spec('playwright') is not None
+            return dict(
+                project=record, prerequisites=requirements,
+                enabled=bool(app.config['ARENA_ENABLE_LIVE_KANE']),
+                test_text=test.decode('utf-8'),
+                test_sha256=hashlib.sha256(test).hexdigest(),
+                test_origin='Generated and automatically checked from the LOCAL contract; no test approval box in the judge workflow.',
+                authentication='CLI presence only; authentication and account allowances are checked by the real run.',
+                supported='LOCAL support is limited to declared static assets and one integer in its contract JSON file.',
+            )
         test_path = (Path('.testmuai/tests/SeatPilotBooking_test.md') if record.get('adapter')=='seatpilot'
                      else Path(kane_live.TEST_PATH))
         if project_id == 'seatpilot-generated':
@@ -219,6 +243,8 @@ def register_project_routes(app, require_local_viewer):
             return app.json.response(error='Expected a JSON object.'), 400
         try:
             info = preflight(project_id)
+            if info['project'].get('adapter') == 'local-contract':
+                raise ValueError('Use the separate judge workflow for LOCAL projects; no imported server or install script is run.')
             if not info['enabled']:
                 raise ValueError('Local execution is disabled. Set ARENA_ENABLE_LIVE_KANE=1 and restart Arena.')
             if not info['project']['compatible']:
@@ -255,3 +281,103 @@ def register_project_routes(app, require_local_viewer):
             # Validation messages are local fixed strings, never raw subprocess logs.
             message = str(error) if isinstance(error, ValueError) else 'Project preparation failed; no run launched.'
             return app.json.response(error=message), 400
+
+    if app.config.get('ARENA_ISOLATED_COPY'):
+        return
+
+    @app.post('/api/judge-workflow')
+    def api_judge_workflow_start():
+        local_write()
+        from .judge_workflow import GLOBAL_JUDGE_REGISTRY, WorkflowError, execute_judge_workflow
+        from .judge_adapters import (
+            BreakShopJudgeDriver, LocalContractJudgeDriver, build_judge_agents,
+        )
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or set(data) != {'project_id'} or not isinstance(data['project_id'], str):
+            return app.json.response(error='Choose one supported local project.'), 400
+        project_id = data['project_id']
+        try:
+            if project_id == 'builtin':
+                adapter_id = 'breakshop'
+                driver_factory = lambda run_id: BreakShopJudgeDriver(
+                    run_id, artifacts_root=app.config.get(
+                        'ARENA_JUDGE_ARTIFACTS', Path(app.instance_path) / 'judge-workflows'))
+            elif project_id == 'local-contract-sample':
+                adapter_id = 'local-contract'
+                driver_factory = lambda run_id: LocalContractJudgeDriver(
+                    run_id, source=ROOT / 'examples/local-contract-museum',
+                    artifacts_root=Path(app.config.get(
+                        'ARENA_JUDGE_ARTIFACTS', Path(app.instance_path) / 'judge-workflows')))
+            else:
+                folder, record = load_project(app.config['ARENA_PROJECTS'], project_id)
+                if record.get('adapter') != 'local-contract' or not record.get('compatible'):
+                    raise WorkflowError('Only BreakShop and a valid LOCAL static-data contract can use this workflow.')
+                adapter_id = 'local-contract'
+                driver_factory = lambda run_id: LocalContractJudgeDriver(
+                    run_id, source=folder / 'source',
+                    artifacts_root=Path(app.config.get(
+                        'ARENA_JUDGE_ARTIFACTS', Path(app.instance_path) / 'judge-workflows')))
+            if not app.config['ARENA_ENABLE_LIVE_KANE']:
+                raise WorkflowError('Local execution is disabled. Set ARENA_ENABLE_LIVE_KANE=1 and restart Arena.')
+            requirements = prerequisites()
+            missing = [name for name in ('chrome', 'kane', 'codex', 'gemini')
+                       if not requirements.get(name)]
+            if adapter_id == 'local-contract':
+                from importlib.util import find_spec
+                if find_spec('playwright') is None:
+                    missing.append('playwright')
+            if missing:
+                raise WorkflowError('Install or configure the required local tools before starting: ' +
+                                    ', '.join(missing) + '.')
+            run = GLOBAL_JUDGE_REGISTRY.create(adapter_id)
+            try:
+                driver = driver_factory(run.id)
+                agents = build_judge_agents(driver, show_browser=False)
+            except (OSError, RuntimeError, ValueError):
+                with run.lock:
+                    run.state = 'infrastructure_error'
+                    run.result = 'infrastructure_error'
+                    run.error = 'Workflow setup failed; inspect private local logs.'
+                raise WorkflowError('Judge workflow setup failed; no agents were started.') from None
+
+            def execute():
+                try:
+                    execute_judge_workflow(run, driver, agents, approval_timeout=120)
+                finally:
+                    try:
+                        driver.close()
+                    except (OSError, RuntimeError):
+                        with run.lock:
+                            run.state = 'infrastructure_error'
+                            run.result = 'infrastructure_error'
+                            run.error = 'Isolated app cleanup failed; no completion is claimed.'
+
+            worker = threading.Thread(target=execute, daemon=True)
+            worker.start()
+            return app.json.response(workflow=run.public()), 202
+        except (WorkflowError, ValueError, OSError) as error:
+            return app.json.response(error=str(error)), 400
+
+    @app.get('/api/judge-workflow/<run_id>')
+    def api_judge_workflow_status(run_id):
+        require_local_viewer()
+        from .judge_workflow import GLOBAL_JUDGE_REGISTRY
+        run = GLOBAL_JUDGE_REGISTRY.get(run_id)
+        if run is None:
+            return app.json.response(error='Judge workflow is unavailable.'), 404
+        return app.json.response(workflow=run.public())
+
+    @app.post('/api/judge-workflow/<run_id>/decision')
+    def api_judge_workflow_decision(run_id):
+        local_write()
+        from .judge_workflow import GLOBAL_JUDGE_REGISTRY, WorkflowError
+        data = request.get_json(silent=True)
+        if (not isinstance(data, dict) or set(data) != {'proposal_id', 'decision'}
+                or not isinstance(data.get('proposal_id'), str)
+                or not isinstance(data.get('decision'), str)):
+            return app.json.response(error='Choose approve or reject for the pending fault.'), 400
+        try:
+            run = GLOBAL_JUDGE_REGISTRY.decide(run_id, data['proposal_id'], data['decision'])
+            return app.json.response(workflow=run.public())
+        except WorkflowError as error:
+            return app.json.response(error=str(error)), 409

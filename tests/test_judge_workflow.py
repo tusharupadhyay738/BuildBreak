@@ -1,5 +1,6 @@
 """Offline fixtures for the opt-in judge workflow; no agent CLIs are launched."""
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import threading
@@ -8,10 +9,11 @@ import unittest
 from types import SimpleNamespace
 
 from buildbreak.battle_runner import ROOT
-from buildbreak.judge_adapters import BreakShopJudgeDriver
+from buildbreak.judge_adapters import BreakShopJudgeDriver, LocalContractJudgeDriver
 from buildbreak.judge_workflow import (
     JudgeRegistry, JudgeRun, WorkflowError, execute_judge_workflow,
 )
+from buildbreak.site_contract import observe
 
 
 class FakeDriver:
@@ -253,6 +255,8 @@ class JudgeWorkflowTests(unittest.TestCase):
         run = registry.create('fixture')
         run.state = 'awaiting_fault_approval'
         run.proposal_id = 'proposal-1'
+        run.fault_description = 'Private proposal description'
+        run.fault_diff = 'private diff'
         run.approval_deadline = time.monotonic() + 1
         with self.assertRaises(WorkflowError):
             registry.decide(run.id, 'stale-proposal', 'approve')
@@ -260,6 +264,10 @@ class JudgeWorkflowTests(unittest.TestCase):
         with self.assertRaises(WorkflowError):
             registry.decide(run.id, 'proposal-1', 'approve')
         self.assertEqual(run.decision, 'approve')
+        self.assertEqual(run.state, 'fault_decision_received')
+        self.assertEqual(run.public()['fault_diff'], '')
+        with self.assertRaises(WorkflowError):
+            registry.create('fixture')
 
 
 class BreakShopWorkflowIntegrationTests(unittest.TestCase):
@@ -310,7 +318,9 @@ class BreakShopWorkflowIntegrationTests(unittest.TestCase):
                 deadline = time.monotonic() + 10
                 while run.state != 'awaiting_fault_approval' and worker.is_alive() and time.monotonic() < deadline:
                     time.sleep(.01)
-                self.assertEqual(run.state, 'awaiting_fault_approval')
+                self.assertEqual(run.state, 'awaiting_fault_approval',
+                                 (run.public(), getattr(run, 'failure_type', None),
+                                  getattr(run, 'failure_reason', None)))
                 self.assertEqual((driver.original_workspace / 'app.py').read_text(encoding='utf-8'),
                                  original_source)
                 self.assertIn('app.py', run.fault_diff)
@@ -328,6 +338,67 @@ class BreakShopWorkflowIntegrationTests(unittest.TestCase):
             finally:
                 if worker.is_alive():
                     worker.join(timeout=30)
+                driver.close()
+
+
+class LocalContractWorkflowIntegrationTests(unittest.TestCase):
+    def test_third_app_completes_flow_with_real_local_browser_and_mocked_agents(self):
+        example = ROOT / 'examples/local-contract-museum'
+        with tempfile.TemporaryDirectory() as temporary:
+            driver = LocalContractJudgeDriver(
+                'offline-museum', source=example, artifacts_root=Path(temporary) / 'artifacts')
+            seen = {'author_flags': []}
+
+            class Kane:
+                def run(self, copy, test, expected_hash, author):
+                    actual = observe(copy['site'], driver.target_for(copy))
+                    expected = copy['site'].expected
+                    status = 'passed' if actual == expected else 'verification_failed'
+                    seen['author_flags'].append(author)
+                    return dict(result=status, evidence_id='synthetic-' + copy['id'],
+                                test_hash=expected_hash, target_url=driver.target_for(copy),
+                                failure=f'Synthetic visible assertion: expected {expected}; observed {actual}.')
+
+            class Gemini:
+                def propose(self, source, test, contract):
+                    seen['gemini_source'] = source
+                    seen['gemini_test'] = test
+                    return {'file': 'site/offer.json', 'field': 'price_cents',
+                            'old_value': 1800, 'new_value': 1700,
+                            'description': 'Synthetic one-field price fault.'}
+
+            class Codex:
+                def repair(self, source, evidence):
+                    seen['codex_source'] = source
+                    seen['codex_evidence'] = evidence
+                    return {'content': json.dumps({'price_cents': 1800}, indent=2) + '\n'}
+
+            agents = SimpleNamespace(kane=Kane(), gemini=Gemini(), codex=Codex())
+            run = JudgeRun(adapter_id='local-contract')
+            worker = threading.Thread(target=execute_judge_workflow,
+                                      args=(run, driver, agents, 2), daemon=True)
+            try:
+                worker.start()
+                deadline = time.monotonic() + 15
+                while run.state != 'awaiting_fault_approval' and worker.is_alive() and time.monotonic() < deadline:
+                    time.sleep(.01)
+                self.assertEqual(run.state, 'awaiting_fault_approval')
+                self.assertIn('offer.json', run.fault_diff)
+                self.assertIn('1700', run.fault_diff)
+                self.assertEqual(driver.base_site.data['price_cents'], 1800)
+                run.decide(run.proposal_id, 'approve')
+                worker.join(timeout=60)
+                self.assertFalse(worker.is_alive(), 'LOCAL contract workflow did not finish')
+                self.assertEqual(run.state, 'completed', run.public())
+                self.assertEqual(seen['author_flags'], [True, False, False, False])
+                self.assertEqual(seen['gemini_test'], driver.test_bytes)
+                self.assertEqual(set(seen['codex_source']), {'site/offer.json'})
+                self.assertEqual(json.loads(seen['codex_source']['site/offer.json'])['price_cents'], 1700)
+                self.assertIn('observed $17.00', seen['codex_evidence']['summary'])
+                self.assertEqual(driver.base_site.data['price_cents'], 1800)
+            finally:
+                if worker.is_alive():
+                    worker.join(timeout=60)
                 driver.close()
 
 

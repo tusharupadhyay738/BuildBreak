@@ -149,7 +149,7 @@ class Server:
         self.logs = [open(self.artifacts / 'server.stdout.log', 'a', encoding='utf-8'),
                      open(self.artifacts / 'server.stderr.log', 'a', encoding='utf-8')]
         launcher = ('import sys; from app import create_app; '
-                    'create_app({"DATABASE":sys.argv[1]}).run(host="127.0.0.1",port=int(sys.argv[2]))')
+                    'create_app({"DATABASE":sys.argv[1],"ARENA_ISOLATED_COPY":True}).run(host="127.0.0.1",port=int(sys.argv[2]))')
         self.process = owned_spawn([self.python, '-c', launcher, str(self.database), str(self.port)],
                                         cwd=self.workspace, stdout=self.logs[0], stderr=self.logs[1],
                                         env=child_environment('app', self.workspace))
