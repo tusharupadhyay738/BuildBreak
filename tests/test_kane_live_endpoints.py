@@ -131,6 +131,21 @@ class LiveKaneEndpointTests(unittest.TestCase):
             self.assertNotIn(secret, data)
         self.assertIn('step_start', data)
 
+    def test_live_actions_and_assertions_exclude_untrusted_details(self):
+        listener = self.session.add_listener()
+        listener.get_nowait()
+        self.session.handle_line(json.dumps({
+            'type': 'step_event', 'event': 'action', 'action_type': 'click',
+            'success': True, 'detail': 'Cookie secret-token C:/private/path'}))
+        self.session.handle_line(json.dumps({
+            'type': 'step_event', 'event': 'evaluation', 'all_passed': False,
+            'detail': 'private assertion text'}))
+        events = self.drain(listener)
+        self.assertEqual(events, [
+            {'type': 'action', 'action': 'click', 'success': True},
+            {'type': 'assertion', 'passed': False},
+        ])
+
     def test_snapshot_is_copied_and_completed_stream_closes(self):
         self.session.steps.append(dict(index=1, status='passed'))
         listener = self.session.add_listener()

@@ -85,6 +85,17 @@ class KaneDesignTests(unittest.TestCase):
         with self.assertRaisesRegex(DesignError, 'exact result assertion'):
             validate_generated_test(site, content)
 
+    def test_accepts_explicit_use_control_once_but_rejects_vague_use(self):
+        site = read_site(SOURCE)
+        content = (b'## Step 1\nOpen {{start_url}}.\n\n## Step 2\n'
+                   b'Use the visible control with id show-entry-price once, '
+                   b'then assert entry-price equals $18.00.\n')
+        validate_generated_test(site, content)
+        with self.assertRaisesRegex(DesignError, 'required control action'):
+            validate_generated_test(site, content.replace(
+                b'Use the visible control with id show-entry-price once',
+                b'Use show-entry-price'))
+
     def test_rejects_extra_steps_and_external_navigation(self):
         site = read_site(SOURCE)
         valid = (b'## Step 1\nOpen {{start_url}}.\n\n## Step 2\n'

@@ -330,8 +330,6 @@ function renderOverviewSection(
       </div>
 
       <div class="px-6 py-5 space-y-4">
-        ${renderLiveRunner()}
-
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div class="space-y-0.5">
             <div class="flex items-center gap-2.5">
@@ -1192,6 +1190,12 @@ function renderProjectSetup(judgeWorkflows = []) {
         <span id="judge-project-label" class="text-xs text-slate-600">Selected app: BreakShop</span>
       </div>
       <p id="judge-status" role="status" aria-live="polite" class="text-sm text-slate-700">Select a supported app and check local setup to begin.</p>
+      <div aria-label="Live judge workflow progress" class="space-y-1">
+        <div class="flex justify-between text-xs text-slate-600"><span>Judge workflow progress</span><span id="judge-progress-label">Waiting to start</span></div>
+        <div id="judge-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" class="h-2 overflow-hidden rounded bg-slate-200">
+          <div id="judge-progress-fill" class="h-full bg-indigo-600 transition-all duration-500" style="width:0%"></div>
+        </div>
+      </div>
       <ol id="judge-events" class="list-decimal pl-5 text-xs text-slate-600 space-y-1"></ol>
       <div id="judge-proposal" hidden class="rounded border border-amber-300 bg-amber-50 p-3 space-y-2">
         <h4 class="text-sm font-semibold text-amber-950">Operator decision required · no fault applied yet</h4>
@@ -1299,7 +1303,8 @@ export function renderArenaDashboard(state) {
 
   const parts = [renderWorkspaceBanner(payload, activePreviewKey),
     ...(activePreviewKey === 'archive' || payload.autoSample
-      ? [renderProjectSetup(payload.judgeWorkflows)] : [])];
+      ? [renderProjectSetup(payload.judgeWorkflows)] : []),
+    ...(activePreviewKey === 'archive' || payload.autoSample ? [renderLiveRunner()] : [])];
 
   if (payload.status === 'loading') {
     parts.push(renderLoadingState());
@@ -1312,13 +1317,11 @@ export function renderArenaDashboard(state) {
   }
 
   if (payload.status === 'empty' || !Array.isArray(payload.battles) || payload.battles.length === 0) {
-    if (activePreviewKey === 'archive') parts.push(renderLiveRunner());
     parts.push(renderEmptyState());
     return parts.join('\n');
   }
 
   if (!selectedBattle) {
-    if (activePreviewKey === 'archive') parts.push(renderLiveRunner());
     parts.push(renderHistorySection(payload.battles, filteredBattles, null, {outcomeFilter, searchQuery}));
     return parts.join('\n');
   }

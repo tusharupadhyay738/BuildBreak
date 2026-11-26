@@ -725,6 +725,12 @@ export function initArenaDashboard() {
       followFullBattle(event.battle_id);
     } else if (event.type === 'snapshot') {
       if (event.battle_id) followFullBattle(event.battle_id);
+      if (typeof event.judge_id === 'string' && /^[a-f0-9]{32}$/.test(event.judge_id)) {
+        judgeRunId = event.judge_id;
+        judgeStarted = true;
+        if (!judgeTimer) judgeTimer = setInterval(pollJudgeWorkflow, 1000);
+        pollJudgeWorkflow();
+      }
       if (event.started_at) liveStartTime = event.started_at * 1000;
       handleLiveKaneEvent({type: 'status', status: event.status, message: event.message});
       if (event.phase) appendLiveLog(`Kane phase: ${event.phase}`, 'text-cyan-300');
@@ -772,7 +778,16 @@ export function initArenaDashboard() {
     } else if (event.type === 'step_end') {
       appendLiveLog(`Step ${event.step_index}: ${event.status}`, event.status === 'passed' ? 'text-emerald-400' : 'text-amber-300');
     } else if (event.type === 'phase') {
+      if (event.test_path === 'Kane-generated LOCAL test (locked)') {
+        const field = document.getElementById('live-test-path');
+        if (field) field.value = event.test_path;
+      }
       appendLiveLog(`Kane phase: ${event.phase} (attempt ${event.attempt})`, 'text-cyan-300');
+    } else if (event.type === 'action') {
+      appendLiveLog(`Kane action: ${event.action}${event.success ? ' completed' : ''}`, 'text-slate-300');
+    } else if (event.type === 'assertion') {
+      appendLiveLog(`Kane assertion: ${event.passed ? 'passed' : 'failed'}`,
+        event.passed ? 'text-emerald-400' : 'text-amber-300');
     } else if (event.type === 'progress') {
       appendLiveLog(event.message, 'text-cyan-300');
     } else if (event.type === 'live_view') {
@@ -844,6 +859,7 @@ export function initArenaDashboard() {
   let judgePolling = false;
   let judgeTimer = null;
   let judgeStarted = false;
+  let lastJudgeStage = '';
   function projectText(id, text) {
     const node = document.getElementById(id);
     if (node) node.textContent = text;
@@ -894,6 +910,24 @@ export function initArenaDashboard() {
     judgeProposalId = run.proposal_id || '';
     const stateLabel = String(run.state || 'unknown').replaceAll('_', ' ');
     projectText('judge-status', run.error || `Judge workflow: ${stateLabel}${run.result ? ` (${run.result})` : ''}.`);
+    const healthyPasses = Array.isArray(run.executions)
+      ? run.executions.filter((item) => item.stage === 'healthy' && item.result === 'passed').length : 0;
+    const positions = {created:0, authoring_test:1, qualifying_test:2 + Math.min(healthyPasses, 2),
+      awaiting_fault_approval:4, fault_decision_received:4, validating_fault:5,
+      verifying_fault:6, repairing:7, repair_rejected:7, repair_attempt_failed:7,
+      verifying_repair:8, completed:8};
+    const step = positions[run.state] ?? 0;
+    const percent = Math.round(step * 100 / 8);
+    const progress = document.getElementById('judge-progress');
+    const fill = document.getElementById('judge-progress-fill');
+    if (progress) progress.setAttribute('aria-valuenow', String(percent));
+    if (fill) fill.style.width = `${percent}%`;
+    projectText('judge-progress-label', run.state === 'completed' ? '8 / 8 · verified' :
+      judgeTerminalStates.has(run.state) ? `${step} / 8 · ${stateLabel}` : `${step} / 8 · ${stateLabel}`);
+    if (run.state !== lastJudgeStage) {
+      lastJudgeStage = run.state;
+      appendLiveLog(`Arena: ${stateLabel}`, 'text-cyan-300');
+    }
     const events = document.getElementById('judge-events');
     if (events) {
       const items = (Array.isArray(run.events) ? run.events : []).map((item) => {
@@ -952,6 +986,7 @@ export function initArenaDashboard() {
       if (!response.ok) throw new Error(data.error || 'Judge workflow could not start.');
       judgeStarted = true;
       renderJudgeRun(data.workflow);
+      connectKaneStream();
       judgeTimer = setInterval(pollJudgeWorkflow, 1000);
       pollJudgeWorkflow();
     } catch (error) {

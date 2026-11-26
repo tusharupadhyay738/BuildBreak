@@ -67,7 +67,8 @@ class LiveKaneSession:
                 total_steps=self.total_steps, steps=self.steps,
                 latest_screenshot=self.latest_screenshot, message=self.error_message,
                 started_at=self.started_at, live_view_url=self.live_view_url,
-                phase=getattr(self, 'phase', None), battle_id=getattr(self, 'battle_id', None))))
+                phase=getattr(self, 'phase', None), battle_id=getattr(self, 'battle_id', None),
+                judge_id=getattr(self, 'judge_id', None))))
         return listener
 
     def remove_listener(self, listener):
@@ -147,6 +148,16 @@ class LiveKaneSession:
         # Free-form objectives, summaries and screenshot paths stay private.
         with self.lock:
             kind = event.get('type')
+            if kind == 'step_event' and event.get('event') == 'action':
+                action = event.get('action_type')
+                if action in {'navigate', 'click', 'scroll', 'type', 'reload', 'wait'}:
+                    self.broadcast(dict(type='action', action=action,
+                                        success=event.get('success') is True))
+                return
+            if kind == 'step_event' and event.get('event') == 'evaluation':
+                if type(event.get('all_passed')) is bool:
+                    self.broadcast(dict(type='assertion', passed=event['all_passed']))
+                return
             idx = event.get('step_index')
             if kind not in {'test_md_step_start', 'test_md_step_end'}:
                 return

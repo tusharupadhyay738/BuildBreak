@@ -74,7 +74,11 @@ def validate_generated_test(site, data):
                          opening + check, re.I)):
         raise DesignError('Kane test includes an action outside the LOCAL contract.')
     if site.click_id:
-        if site.click_id not in check or not re.search(r'\b(click|activate|press)\b', check, re.I):
+        explicit_action = re.search(r'\b(click|activate|press)\b', check, re.I)
+        explicit_use = re.search(
+            rf'\buse the visible control with id {re.escape(site.click_id)} once\b',
+            check, re.I)
+        if site.click_id not in check or not (explicit_action or explicit_use):
             raise DesignError('Kane test omits the required control action.')
         if re.search(r'\b(if present|if available|if it exists|when present|optionally)\b',
                      text, re.I):
