@@ -9,6 +9,7 @@ evidence accounts describe what actually ran, including failures and limits.
 | Run a controlled or agent-driven battle | [Runner guide](guides/replayable-battles.md) |
 | Configure the default Gemini Breaker or replay a cache | [Gemini and cache setup](guides/gemini-breaker.md) |
 | See a genuine generated fault and repair | [First Gemini drill](evidence/gemini-first-battle.md) |
+| See two real Kane-generated Museum health checks | [Museum generated test](evidence/museum-generated-healthy.md) |
 | Inspect the live run using Gemini by default | [November 17 default-mode drill](evidence/gemini-default-battle.md) |
 | Inspect the latest documented Gemini pricing repair | [November 18 generated fault](evidence/gemini-pricing-battle-2026-11-18.md) |
 | Launch from the dashboard or try SeatPilot | [Project setup and supported imports](guides/self-service.md) |

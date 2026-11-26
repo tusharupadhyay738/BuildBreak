@@ -708,6 +708,7 @@ export function initArenaDashboard() {
       if (!response.ok) return;
       const payload = await response.json();
       state.payload = payload;
+      pendingArchivePayload = null;
       state.activePreviewKey = 'archive';
       state.selectedBattleId = id;
       state.selectedStageIndex = 0;
@@ -838,9 +839,148 @@ export function initArenaDashboard() {
   let selectedProject = 'builtin';
   let selectionVersion = 0;
   let projectLaunching = false;
+  let judgeRunId = '';
+  let judgeProposalId = '';
+  let judgePolling = false;
+  let judgeTimer = null;
+  let judgeStarted = false;
   function projectText(id, text) {
     const node = document.getElementById(id);
     if (node) node.textContent = text;
+  }
+  function projectApiError(error) {
+    if (error instanceof TypeError || error instanceof SyntaxError) {
+      return "Arena's Flask API is unavailable. Open http://127.0.0.1:5000/arena and try again.";
+    }
+    return error.message || 'Project request failed.';
+  }
+  const judgeTerminalStates = new Set([
+    'completed', 'escaped', 'fault_rejected', 'approval_timeout',
+    'baseline_failed', 'test_unstable', 'unsupported', 'repair_failed',
+    'infrastructure_error',
+  ]);
+  function updateJudgeStart() {
+    const button = document.getElementById('judge-start');
+    if (!button) return;
+    const supported = projectInfo?.project?.adapter === 'local-contract';
+    const requirements = projectInfo?.prerequisites || {};
+    const missing = ['chrome', 'kane', 'codex', 'gemini'].filter((name) => !requirements[name]);
+    if (projectInfo?.project?.adapter === 'local-contract' && !requirements.playwright) missing.push('playwright');
+    const unavailable = !projectInfo || projectInfo.project.id !== selectedProject ||
+      !supported || !projectInfo.enabled || !projectInfo.judge_workflow_available || missing.length > 0;
+    button.disabled = Boolean(judgeStarted || judgeRunId || unavailable);
+    const label = document.getElementById('judge-project-label');
+    if (label) {
+      label.textContent = `Selected app: ${projectInfo?.project?.name ||
+        (selectedProject === 'builtin' ? 'BreakShop' : selectedProject === 'local-contract-sample'
+          ? 'Museum Exhibit Price Card' : selectedProject)}`;
+    }
+    if (judgeStarted && !judgeRunId) {
+      projectText('judge-status', 'This Arena process has already used its one judge workflow slot.');
+    } else if (supported && projectInfo && !projectInfo.judge_workflow_available) {
+      projectText('judge-status', projectInfo.judge_workflow_blocker ||
+        'The Kane-generated judge workflow is unavailable for this project.');
+    } else if (!supported && projectInfo) {
+      projectText('judge-status', 'Choose a valid LOCAL static-data contract for the Kane-generated judge workflow.');
+    } else if (projectInfo && !projectInfo.enabled) {
+      projectText('judge-status', 'Local execution is disabled. Enable it and restart Arena before starting.');
+    } else if (missing.length) {
+      projectText('judge-status', `Configure the missing local tools before starting: ${missing.join(', ')}.`);
+    }
+  }
+  function renderJudgeRun(run) {
+    if (!run || typeof run !== 'object') throw new Error('The judge workflow returned an invalid status.');
+    judgeRunId = run.id || judgeRunId;
+    judgeProposalId = run.proposal_id || '';
+    const stateLabel = String(run.state || 'unknown').replaceAll('_', ' ');
+    projectText('judge-status', run.error || `Judge workflow: ${stateLabel}${run.result ? ` (${run.result})` : ''}.`);
+    const events = document.getElementById('judge-events');
+    if (events) {
+      const items = (Array.isArray(run.events) ? run.events : []).map((item) => {
+        const li = document.createElement('li');
+        li.textContent = item && typeof item.message === 'string' ? item.message : 'Workflow event unavailable.';
+        return li;
+      });
+      events.replaceChildren(...items);
+    }
+    const proposal = document.getElementById('judge-proposal');
+    const awaiting = run.state === 'awaiting_fault_approval' &&
+      typeof run.proposal_id === 'string' && run.proposal_id.length > 0;
+    if (proposal) proposal.hidden = !awaiting;
+    projectText('judge-fault-description', awaiting ? run.fault_description : '');
+    projectText('judge-fault-diff', awaiting ? run.fault_diff : '');
+    const approve = document.getElementById('judge-approve-fault');
+    const reject = document.getElementById('judge-reject-fault');
+    if (approve) approve.disabled = !awaiting;
+    if (reject) reject.disabled = !awaiting;
+    if (judgeTerminalStates.has(run.state)) {
+      clearInterval(judgeTimer);
+      judgeTimer = null;
+      judgePolling = false;
+      judgeStarted = true;
+    } else {
+      updateJudgeStart();
+    }
+  }
+  async function pollJudgeWorkflow() {
+    if (!judgeRunId || judgePolling) return;
+    judgePolling = true;
+    try {
+      const response = await fetch(`/api/judge-workflow/${encodeURIComponent(judgeRunId)}`, {cache:'no-store'});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not read judge workflow status.');
+      renderJudgeRun(data.workflow);
+    } catch (error) {
+      projectText('judge-status', projectApiError(error));
+    } finally {
+      judgePolling = false;
+    }
+  }
+  async function startJudgeWorkflow() {
+    if (!projectInfo || !document.getElementById('judge-start') ||
+        document.getElementById('judge-start').disabled || judgeStarted) return;
+    const button = document.getElementById('judge-start');
+    button.disabled = true;
+    projectText('judge-status', 'Starting the one capped judge workflow...');
+    try {
+      const response = await fetch('/api/judge-workflow', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Arena-Request':'1'},
+        body:JSON.stringify({project_id:selectedProject}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Judge workflow could not start.');
+      judgeStarted = true;
+      renderJudgeRun(data.workflow);
+      judgeTimer = setInterval(pollJudgeWorkflow, 1000);
+      pollJudgeWorkflow();
+    } catch (error) {
+      projectText('judge-status', projectApiError(error));
+      updateJudgeStart();
+    }
+  }
+  async function decideJudgeFault(decision) {
+    if (!judgeRunId || !judgeProposalId || !['approve', 'reject'].includes(decision)) return;
+    const buttons = ['judge-approve-fault', 'judge-reject-fault']
+      .map((id) => document.getElementById(id)).filter(Boolean);
+    buttons.forEach((button) => { button.disabled = true; });
+    projectText('judge-status', decision === 'approve'
+      ? 'Approval sent. Arena will validate the exact proposed edit.'
+      : 'Rejection sent. The fault will not be applied.');
+    try {
+      const response = await fetch(`/api/judge-workflow/${encodeURIComponent(judgeRunId)}/decision`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Arena-Request':'1'},
+        body:JSON.stringify({proposal_id:judgeProposalId, decision}),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Fault decision was not accepted.');
+      renderJudgeRun(data.workflow);
+      pollJudgeWorkflow();
+    } catch (error) {
+      projectText('judge-status', projectApiError(error));
+      buttons.forEach((button) => { button.disabled = false; });
+    }
   }
   function updateProjectStart() {
     const button = document.getElementById('project-start');
@@ -851,6 +991,8 @@ export function initArenaDashboard() {
     if (projectLaunching || projectRunActive) next = 'Follow the current battle in the live panel below.';
     else if (!projectInfo) next = 'Select a project and wait for its setup check.';
     else if (!projectInfo.project.compatible) next = 'Choose a bundled demo to run a battle.';
+    else if (projectInfo.project.adapter === 'local-contract')
+      next = 'Use the new judge workflow above; the legacy battle runner never starts LOCAL imports.';
     else if (!projectInfo.enabled) next = 'Enable local execution and restart Arena.';
     else if (!requirements.chrome || !requirements.kane || !requirements.codex || requirements.node === false)
       next = 'Install the tools marked missing above, then refresh this page.';
@@ -861,7 +1003,7 @@ export function initArenaDashboard() {
     button.disabled = Boolean(next);
     projectText('project-next', next || 'Ready. Start the battle to watch Kane check the healthy app.');
   }
-  async function loadProject(id) {
+  async function loadProject(id, imported = false) {
     const version = ++selectionVersion;
     projectInfo = null;
     const approval = document.getElementById('project-approve');
@@ -874,8 +1016,23 @@ export function initArenaDashboard() {
       if (!response.ok) throw new Error(data.error || 'Preflight failed.');
       projectInfo = data;
       selectedProject = id;
-      projectText('project-status', `${data.project.framework}: ${data.project.reason}`);
+      updateJudgeStart();
+      const adapter = data.project.compatible
+        ? `Runnable adapter: ${data.project.adapter === 'breakshop' ? 'BreakShop' :
+          data.project.adapter === 'local-contract' ? 'LOCAL static-data contract' : 'SeatPilot'}.`
+        : 'Inspection only: no runnable adapter.';
+      const localScope = data.project.adapter === 'local-contract' && data.supported
+        ? ` Supported scope: ${data.supported}` : '';
+      projectText('project-status',
+        `${imported ? 'Import complete. ' : ''}${adapter} ${data.project.reason}${localScope}`);
       projectText('project-test', data.project.compatible ? data.test_text : 'No test approved. A project-specific adapter is required.');
+      projectText('project-test-origin', !data.project.compatible
+        ? 'No approved test is available for this inspection-only import.'
+        : id === 'seatpilot-generated'
+          ? 'Kane CLI-generated proposal; separate from the protected curated tests and requires your approval.'
+          : data.project.adapter === 'local-contract'
+            ? data.test_origin
+            : 'Protected curated demo test; review and explicitly approve before launch.');
       projectText('project-test-hash', data.project.compatible ? `SHA-256: ${data.test_sha256}` : '');
       const p = data.prerequisites;
       projectText('setup-local-execution', data.enabled ? 'Enabled' : 'Disabled');
@@ -885,8 +1042,9 @@ export function initArenaDashboard() {
       projectText('setup-gemini', p.gemini ? 'Configured' : 'Not configured');
       projectText('setup-node', p.node === undefined ? 'Not required' : p.node ? 'Found' : 'Missing');
     } catch (error) {
-      if (version === selectionVersion) projectText('project-status', error.message);
+      if (version === selectionVersion) projectText('project-status', projectApiError(error));
     }
+    updateJudgeStart();
     updateProjectStart();
   }
   async function importProject() {
@@ -897,14 +1055,26 @@ export function initArenaDashboard() {
     updateProjectStart();
     projectText('project-status','Importing source only; no project code or install scripts are being run...');
     const version = ++selectionVersion;
+    const button = document.getElementById('project-import');
+    if (button) {
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+    }
     const form = new FormData();
     form.append('project',file);
     try {
       const response = await fetch('/api/projects/import',{method:'POST',headers:{'X-Arena-Request':'1'},body:form});
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Import failed.');
-      if (version === selectionVersion) await loadProject(data.project.id);
-    } catch (error) { if (version === selectionVersion) projectText('project-status',error.message); }
+      if (version === selectionVersion) await loadProject(data.project.id, true);
+    } catch (error) {
+      if (version === selectionVersion) projectText('project-status', projectApiError(error));
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+      }
+    }
   }
   async function launchProject() {
     if (!projectInfo || projectLaunching) return;
@@ -933,21 +1103,37 @@ export function initArenaDashboard() {
     else if (event.target.closest('#project-builtin')) loadProject('builtin');
     else if (event.target.closest('#project-seatpilot')) loadProject('seatpilot');
     else if (event.target.closest('#project-generated')) loadProject('seatpilot-generated');
+    else if (event.target.closest('#project-local-sample')) loadProject('local-contract-sample');
     else if (event.target.closest('#project-start')) launchProject();
+    else if (event.target.closest('#judge-start')) startJudgeWorkflow();
+    else if (event.target.closest('#judge-approve-fault')) decideJudgeFault('approve');
+    else if (event.target.closest('#judge-reject-fault')) decideJudgeFault('reject');
   });
   document.addEventListener('change',(event)=>{
     if (event.target.matches('#project-approve, #project-breaker')) updateProjectStart();
   });
+  window.addEventListener('pagehide', () => clearInterval(judgeTimer));
   loadProject('builtin');
 
+  // Keep the latest update until the current interaction finishes. The backend
+  // poller deduplicates payloads, so a deferred event will not be sent again.
+  let pendingArchivePayload = null;
+  function flushPendingArchive() {
+    if (!pendingArchivePayload) return;
+    if (state.activePreviewKey !== 'archive' && !state.payload.autoSample) return;
+    if (document.activeElement?.id === 'battle-search' || document.activeElement?.closest('#project-setup-panel') || state.isReplayingStages || isDraggingWipe) return;
+    state.payload = applySampleReplay(pendingArchivePayload);
+    pendingArchivePayload = null;
+    state.activePreviewKey = state.payload.autoSample ? 'historical_demo' : 'archive';
+    render();
+  }
   document.addEventListener('arena:archive-update', (event) => {
     const script = document.getElementById('arena-payload');
     if (script) script.textContent = JSON.stringify(event.detail);
-    if (state.activePreviewKey !== 'archive' && !state.payload.autoSample) return;
-    if (document.activeElement?.id === 'battle-search' || document.activeElement?.closest('#project-setup-panel') || state.isReplayingStages || isDraggingWipe) return;
-    state.payload = applySampleReplay(event.detail);
-    state.activePreviewKey = state.payload.autoSample ? 'historical_demo' : 'archive';
-    render();
+    pendingArchivePayload = event.detail;
+    flushPendingArchive();
   });
+  const archiveFlushInterval = setInterval(flushPendingArchive, 250);
+  window.addEventListener('pagehide', () => clearInterval(archiveFlushInterval));
   render();
 }

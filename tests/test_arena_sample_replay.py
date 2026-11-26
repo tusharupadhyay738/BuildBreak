@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import tempfile
 import unittest
 
@@ -13,6 +14,9 @@ except ImportError:
     expect = None
     sync_playwright = None
 
+if os.environ.get('ARENA_REQUIRE_BROWSER_TESTS') == '1' and sync_playwright is None:
+    raise RuntimeError('Browser tests are required; install requirements-dev.txt.')
+
 
 @unittest.skipUnless(sync_playwright, 'Playwright is not installed.')
 class ArenaSampleReplayTests(unittest.TestCase):
@@ -20,9 +24,12 @@ class ArenaSampleReplayTests(unittest.TestCase):
     def setUpClass(cls):
         cls.playwright = sync_playwright().start()
         try:
-            cls.browser = cls.playwright.chromium.launch(channel='chrome')
+            options = {} if os.environ.get('ARENA_TEST_BROWSER') == 'chromium' else {'channel': 'chrome'}
+            cls.browser = cls.playwright.chromium.launch(**options)
         except PlaywrightError:
             cls.playwright.stop()
+            if os.environ.get('ARENA_REQUIRE_BROWSER_TESTS') == '1':
+                raise
             raise unittest.SkipTest('Chrome is not installed.')
 
     @classmethod
@@ -62,7 +69,7 @@ class ArenaSampleReplayTests(unittest.TestCase):
         self.page.goto('http://localhost/arena')
 
         expect(self.page.get_by_text(
-            'Showing a SAMPLE replay of recorded battles. Your own battles will appear here.',
+            'Showing a fictional UI demo (SAMPLE), not recorded Kane evidence. Your own battles will appear here.',
             exact=True,
         )).to_be_visible()
         expect(self.page.get_by_text(
@@ -75,38 +82,64 @@ class ArenaSampleReplayTests(unittest.TestCase):
         )).to_be_visible()
         expect(self.page.locator('#battle-filter-bar [data-outcome-filter="all"]')).to_contain_text('0')
 
-    def test_real_record_replaces_sample_and_counts(self):
-        self.page.goto('http://localhost/arena')
-        expect(self.page.get_by_text(
-            'Showing a SAMPLE replay of recorded battles. Your own battles will appear here.',
-            exact=True,
-        )).to_be_visible()
-
+    def recorded_payload(self):
+        # Synthetic archive record for UI tests, not live agent evidence.
         with connect(self.database) as db:
             db.execute('INSERT INTO arena_sessions VALUES (?,?,?,?,?,?)',
-                       ('fixture-real', '2026-11-17T10:00:00+00:00', 'completed',
-                        'fixture-head', 'fixture', 1))
-            save_details(db, 'fixture-real', requested='gemini', producer='gemini',
+                       ('synthetic-fixture-real', '2026-11-17T10:00:00+00:00', 'completed',
+                        'fixture-head', 'SYNTHETIC fixture; not live evidence', 1))
+            save_details(db, 'synthetic-fixture-real', requested='gemini', producer='gemini',
                          source='live', validated=True, family='pricing',
                          invariant='saved_checkout_amounts', max_attempts=3)
         for phase, result in [('baseline', 'passed'), ('before', 'verification_failed'),
                               ('after', 'passed')]:
-            record_run(self.database, 'fixture-real', phase, int(phase == 'after'),
+            record_run(self.database, 'synthetic-fixture-real', phase, int(phase == 'after'),
                        dict(result=result, evidence_id='synthetic', pack_hash='fixture',
                             test_hash='fixture', duration=0))
-        payload = self.client.get('/arena/data').get_json()
+        return self.client.get('/arena/data').get_json()
 
+    def test_real_record_replaces_sample_and_counts(self):
+        self.page.goto('http://localhost/arena')
+        payload = self.recorded_payload()
         self.page.evaluate(
             "(payload) => document.dispatchEvent(new CustomEvent('arena:archive-update', {detail: payload}))",
             payload,
         )
 
         expect(self.page.get_by_text(
-            'Showing a SAMPLE replay of recorded battles. Your own battles will appear here.',
+            'Showing a fictional UI demo (SAMPLE), not recorded Kane evidence. Your own battles will appear here.',
             exact=True,
         )).to_have_count(0)
-        expect(self.page.locator('#history')).to_contain_text('fixture-real')
+        expect(self.page.locator('#history')).to_contain_text('synthetic-fixture-real')
+        expect(self.page.get_by_text('SYNTHETIC fixture; not live evidence', exact=False).first).to_be_visible()
         expect(self.page.get_by_text('Showing 1 of 1 battles (All)', exact=True)).to_be_visible()
+
+    def test_latest_archive_update_waits_for_setup_focus_then_applies(self):
+        self.page.goto('http://localhost/arena')
+        self.page.locator('#project-approve').focus()
+        payload = self.recorded_payload()
+        self.page.evaluate('''(payload) => {
+            document.dispatchEvent(new CustomEvent('arena:archive-update', {detail: payload}));
+            const latest = structuredClone(payload);
+            latest.battles[0].title = 'Newest fixture result';
+            document.dispatchEvent(new CustomEvent('arena:archive-update', {detail: latest}));
+        }''', payload)
+        expect(self.page.get_by_text('Checkout order total renders NaN when tax rate is omitted', exact=True)).to_be_visible()
+        self.page.locator('#project-approve').evaluate('(element) => element.blur()')
+        expect(self.page.locator('#history')).to_contain_text('synthetic-fixture-real')
+        expect(self.page.get_by_text('Newest fixture result', exact=True).first).to_be_visible()
+
+    def test_archive_update_waits_for_replay_then_applies_without_new_event(self):
+        self.page.goto('http://localhost/arena')
+        self.page.locator('[data-stage-replay]').click()
+        payload = self.recorded_payload()
+        self.page.evaluate(
+            "(payload) => document.dispatchEvent(new CustomEvent('arena:archive-update', {detail: payload}))",
+            payload,
+        )
+        expect(self.page.get_by_text('Checkout order total renders NaN when tax rate is omitted', exact=True)).to_be_visible()
+        self.page.get_by_role('button', name='Pause replay', exact=True).click()
+        expect(self.page.locator('#history')).to_contain_text('fixture-real')
 
     def test_setup_and_advanced_controls_remain_available(self):
         self.page.goto('http://localhost/arena')

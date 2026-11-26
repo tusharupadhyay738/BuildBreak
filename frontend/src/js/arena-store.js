@@ -11,7 +11,7 @@
 import { SAMPLE_HISTORICAL_PAYLOAD, STATE_PREVIEWS } from '../data/sample-payload.js';
 
 export const EMPTY_ARCHIVE_SAMPLE_NOTICE =
-  'Showing a SAMPLE replay of recorded battles. Your own battles will appear here.';
+  'Showing a fictional UI demo (SAMPLE), not recorded Kane evidence. Your own battles will appear here.';
 
 export function applySampleReplay(payload) {
   if (payload?.mode !== 'live_archive' || payload.isSample === true ||
@@ -20,8 +20,9 @@ export function applySampleReplay(payload) {
   }
   const sample = getPreviewPayload('historical_demo');
   sample.notice = payload.notice || EMPTY_ARCHIVE_SAMPLE_NOTICE;
-  sample.dataSourceLabel = 'SAMPLE replay of recorded battles';
+  sample.dataSourceLabel = 'Fictional UI demo (SAMPLE)';
   sample.autoSample = true;
+  sample.judgeWorkflows = Array.isArray(payload.judgeWorkflows) ? payload.judgeWorkflows : [];
   return sample;
 }
 

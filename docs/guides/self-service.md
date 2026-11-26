@@ -54,7 +54,7 @@ remaining credits or API availability. Execution reports actual failures.
 
 ## Supported imports and remaining work
 
-**Two explicit adapters can run:** the built-in BreakShop app and the exact
+**The established full-battle demos** are the built-in BreakShop app and the exact
 recognized SeatPilot source export. BreakShop imports must match the canonical
 Python application AST and keep the expected Jinja execution structure. The
 SeatPilot adapter supplies a reviewed Flask API, separate fixed Kane test and
@@ -63,8 +63,15 @@ reviewed repository copy; only the API client and the sample-booking label diffe
 from the supplied design source. The uploaded ZIP's scripts and dependencies are
 never executed or installed. Its accepted source must match the known manifest.
 
+**A separate Kane-generated judge path** accepts the bundled Museum sample or a
+ZIP matching the narrow [LOCAL static-data contract](local-adapter-contract.md).
+Kane designs its browser test from that contract, Arena checks two fresh healthy
+copies, and the operator reviews Gemini's fault. This path runs no imported
+scripts or server code. The [recorded Museum runs](../evidence/museum-generated-healthy.md)
+prove test qualification only; a live end-to-end judge battle is still unverified.
+
 This is not general React or arbitrary-project support. Other imports remain
-inspection-only until they have their own reviewed startup adapter, explicit
+inspection-only until they have a reviewed startup adapter, explicit
 fault allowlist, independent direct invariant and locked acceptance test. URL-only
 fault injection/repair is not supported: changing an isolated app requires source
 code. SeatPilot is fictional demo data with no real payments, and a live Kane

@@ -153,6 +153,8 @@ class ProjectSetupTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('test_sha256', response.json)
         self.assertIn('authentication', response.json)
+        self.assertFalse(response.json['judge_workflow_available'])
+        self.assertIn('LOCAL static-data contract', response.json['judge_workflow_blocker'])
         for value in [b'fixture-secret', str(ROOT).encode(), str(self.root).encode()]:
             self.assertNotIn(value, response.data)
 
@@ -210,6 +212,72 @@ class ProjectSetupTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertTrue(response.json['project']['compatible'])
             start.assert_not_called()
+
+    def test_local_contract_zip_is_preflighted_without_running_extra_scripts(self):
+        example = ROOT / 'examples' / 'local-contract-museum'
+        files = {
+            'museum/' + path.relative_to(example).as_posix(): path.read_bytes()
+            for path in example.rglob('*') if path.is_file()
+        }
+        files['museum/setup.py'] = b"raise RuntimeError('imported scripts must never run')\n"
+        with patch('buildbreak.project_setup.prerequisites',
+                   return_value=dict(kane=True, codex=True, chrome=True, gemini=True)), \
+             patch('buildbreak.project_setup.start_battle') as start:
+            response = self.client.post('/api/projects/import', headers=self.headers,
+                                        data={'project': (archive(files), 'museum.zip')})
+            self.assertEqual(response.status_code, 200)
+            project = response.json['project']
+            self.assertEqual(project['adapter'], 'local-contract')
+            self.assertTrue(project['compatible'])
+            preflight = self.client.get('/api/projects/' + project['id'] + '/preflight')
+            self.assertEqual(preflight.status_code, 200)
+            self.assertIn('Kane generates and locks the test', preflight.json['test_origin'])
+            self.assertTrue(preflight.json['judge_workflow_available'])
+            self.assertIn('LOCAL static-data contract', preflight.json['judge_workflow_blocker'])
+            self.assertIn('Museum Exhibit Price Card', preflight.json['test_text'])
+            launch = self.client.post('/api/projects/' + project['id'] + '/battle',
+                json=dict(approved=True, breaker='scripted', test_sha256=preflight.json['test_sha256']),
+                headers=self.headers)
+            self.assertEqual(launch.status_code, 400)
+            self.assertIn('separate judge workflow', launch.json['error'])
+            start.assert_not_called()
+
+    def test_judge_workflow_route_reports_kane_definition_blocker_before_agent_setup(self):
+        with patch('buildbreak.judge_adapters.build_judge_agents') as build_agents:
+            response = self.client.post('/api/judge-workflow', json={'project_id': 'builtin'},
+                                        headers=self.headers)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('LOCAL static-data project', response.json['error'])
+        build_agents.assert_not_called()
+
+    def test_local_judge_route_starts_only_after_local_preflight(self):
+        from buildbreak.judge_workflow import JudgeRegistry
+        with patch('buildbreak.judge_workflow.GLOBAL_JUDGE_REGISTRY', JudgeRegistry()), \
+             patch('buildbreak.judge_adapters.build_judge_agents',
+                   return_value=SimpleNamespace()) as build_agents, \
+             patch('buildbreak.judge_workflow.execute_judge_workflow') as execute:
+            preflight = self.client.get('/api/projects/local-contract-sample/preflight')
+            self.assertEqual(preflight.status_code, 200)
+            self.assertTrue(preflight.json['judge_workflow_available'])
+            self.assertIn('Kane generates', preflight.json['test_origin'])
+            response = self.client.post('/api/judge-workflow',
+                                        json={'project_id': 'local-contract-sample'},
+                                        headers=self.headers)
+            self.assertEqual(response.status_code, 202, response.json)
+            self.assertEqual(response.json['workflow']['adapter'], 'local-contract')
+            build_agents.assert_called_once()
+            execute.assert_called_once()
+
+    def test_isolated_app_copy_does_not_expose_judge_workflow_routes(self):
+        isolated = create_app({
+            **self.config,
+            'DATABASE': str(self.root / 'isolated-shop.sqlite3'),
+            'ARENA_DATABASE': str(self.root / 'isolated-arena.sqlite3'),
+            'ARENA_ISOLATED_COPY': True,
+        })
+        response = isolated.test_client().post('/api/judge-workflow', json={'project_id': 'builtin'},
+                                               headers=self.headers)
+        self.assertEqual(response.status_code, 404)
 
     def test_runner_callbacks_preserve_closed_loop_and_redirect_history(self):
         project = self.root / 'project'

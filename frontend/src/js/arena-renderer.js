@@ -604,6 +604,10 @@ function renderHistorySection(allBattles, filteredBattles, selectedBattleId, { o
 
 function renderComparisonSection(battle) {
   const comparisons = Array.isArray(battle.comparisons) ? battle.comparisons : [];
+  const escape = battle.escape;
+  const observation = (values) => ['subtotal', 'discount', 'total']
+    .map((key) => `${key[0].toUpperCase()}${key.slice(1)}: ${escapeHtml(values?.[key] || 'Not recorded')}`)
+    .join(' · ');
 
   return `
     <section id="comparison" aria-labelledby="comparison-heading" class="bg-white border border-slate-200 rounded-lg overflow-hidden">
@@ -620,6 +624,24 @@ function renderComparisonSection(battle) {
           ${comparisons.length} assertion${comparisons.length === 1 ? '' : 's'}
         </span>
       </div>
+
+      ${escape ? `
+        <div class="mx-6 my-4 rounded-lg border border-amber-200 bg-amber-50/60 p-4 space-y-3" aria-label="Recorded escape review">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900">${escapeHtml(escape.heading || 'Generated-test fault review')}</h3>
+            <p class="mt-1 text-xs text-amber-900">${escapeHtml(escape.faultStatus || 'Not recorded')}</p>
+          </div>
+          <dl class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div><dt class="font-medium text-slate-700">Healthy observation</dt><dd class="mt-1 font-mono text-slate-800">${observation(escape.healthyObservation)}</dd></div>
+            <div><dt class="font-medium text-slate-700">Changed observation</dt><dd class="mt-1 font-mono text-slate-800">${observation(escape.changedObservation)}</dd></div>
+          </dl>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <p><span class="font-medium text-slate-700">Unchanged browser test checked:</span> ${escapeHtml(escape.browserTestChecked || 'Not recorded')}</p>
+            <p><span class="font-medium text-slate-700">It missed:</span> ${escapeHtml(escape.missed || 'Not recorded')}</p>
+          </div>
+          <p class="text-xs text-slate-700"><span class="font-medium">Follow-up:</span> ${escapeHtml(escape.followUp || 'Not recorded')}</p>
+        </div>
+      ` : ''}
 
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse">
@@ -977,7 +999,7 @@ function renderVerificationSection(battle) {
           </div>
 
           <div class="space-y-1.5">
-            <div class="text-xs font-medium text-slate-700">${battle.isSample ? 'Recorded stdout excerpt (SAMPLE)' : 'Sanitized recorded event summary'}</div>
+            <div class="text-xs font-medium text-slate-700">${battle.isSample ? 'Illustrative stdout excerpt (SAMPLE)' : 'Sanitized recorded event summary'}</div>
             <pre class="font-mono text-xs bg-slate-900 text-slate-100 p-4 rounded-md overflow-x-auto leading-relaxed">${escapeHtml(v.stdoutExcerpt || 'No stdout recorded.')}</pre>
           </div>
         </div>
@@ -1076,17 +1098,61 @@ export function renderBattleFilterBar({ payload, outcomeFilter, counts, filtered
   `;
 }
 
-function renderProjectSetup() {
+function renderJudgeHistory(records) {
+  const workflows = Array.isArray(records) ? records.slice(0, 10) : [];
+  const entries = workflows.map((workflow) => {
+    const events = Array.isArray(workflow.events) ? workflow.events : [];
+    const executions = Array.isArray(workflow.executions) ? workflow.executions : [];
+    return `<article class="rounded border border-slate-200 p-3 space-y-2" data-judge-workflow="${escapeHtml(workflow.id || '')}">
+      <div class="flex flex-wrap justify-between gap-2 text-xs">
+        <strong>${escapeHtml(workflow.result || workflow.state || 'unknown')}</strong>
+        <span>${escapeHtml(workflow.adapter || 'unknown adapter')}</span>
+      </div>
+      <p class="break-all font-mono text-[10px] text-slate-500">Test SHA-256: ${escapeHtml(workflow.test_sha256 || 'not recorded')}</p>
+      <ol class="list-decimal pl-5 text-xs text-slate-600 space-y-1">
+        ${events.map((event) => `<li><strong>${escapeHtml(event.state || 'stage')}</strong>: ${escapeHtml(event.message || '')}</li>`).join('')}
+      </ol>
+      <ul class="space-y-1 text-xs text-slate-600">
+        ${executions.map((execution) => `<li>Kane ${escapeHtml(execution.stage || 'execution')} ${escapeHtml(execution.attempt || '')}: ${escapeHtml(execution.result || 'unknown')}
+          · Execution ID: ${escapeHtml(execution.execution_id || 'not recorded')}
+          · Evidence SHA-256: ${escapeHtml(execution.evidence_ref || 'not recorded')}</li>`).join('')}
+      </ul>
+    </article>`;
+  });
+  return `<section id="judge-history" class="rounded-lg border border-slate-200 bg-white p-4 space-y-2" aria-label="Persistent judge workflow history">
+    <h3 class="text-sm font-semibold text-slate-900">Judge workflow history</h3>
+    ${entries.length ? entries.join('') : '<p class="text-xs text-slate-600">No judge workflow results recorded.</p>'}
+  </section>`;
+}
+
+function renderProjectSetup(judgeWorkflows = []) {
   return `<section id="project-setup-panel" class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
     <h2 class="font-display text-lg font-semibold text-slate-900">Start a full battle</h2>
     <p class="text-sm text-slate-600">Choose a demo to see what Kane will check, or import a supported source ZIP.</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs" aria-label="Demo test review">
+      <article class="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1.5">
+        <h3 class="font-semibold text-slate-900">BreakShop · protected curated test</h3>
+        <p><span class="font-medium">Flow:</span> Reset the cart, add two shirts and one sticker, apply SAVE10, place the order, then reload its confirmation.</p>
+        <p><span class="font-medium">Expected:</span> $44.97 subtotal, $4.50 discount and $40.47 total, including after reload.</p>
+        <p><span class="font-medium">Limit:</span> One checkout scenario; other quantities, coupons and checkout paths are not covered.</p>
+      </article>
+      <article class="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1.5">
+        <h3 class="font-semibold text-slate-900">SeatPilot · protected curated test</h3>
+        <p><span class="font-medium">Flow:</span> Book two Nocturne Symphony tickets with EARLY15, confirm the booking, then reload it.</p>
+        <p><span class="font-medium">Expected:</span> $136.00 subtotal, $20.40 discount, $115.60 total and inventory reduced from 42 to 40.</p>
+        <p><span class="font-medium">Limit:</span> This event and coupon scenario only; it does not cover every event, coupon or concurrent booking.</p>
+      </article>
+    </div>
+    <p class="text-xs text-slate-500">The protected curated tests are separate from generated proposals. Review and explicitly approve the selected test below.</p>
     <div class="flex flex-wrap items-center gap-3">
       <button id="project-seatpilot" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Try SeatPilot ticket booking</button>
       <button id="project-generated" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">SeatPilot generated suite</button>
       <button id="project-builtin" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Use built-in BreakShop</button>
+      <button id="project-local-sample" type="button" class="rounded border border-slate-300 px-3 py-2 text-xs font-medium">Try LOCAL contract example</button>
       <input id="project-zip" type="file" accept=".zip,application/zip" aria-label="Project source ZIP" class="text-sm text-slate-700">
       <button id="project-import" type="button" class="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Import ZIP</button>
     </div>
+    <p class="text-xs text-slate-500">ZIP import requires the local Flask API. If this static preview cannot import, open <a class="underline underline-offset-2" href="http://127.0.0.1:5000/arena">http://127.0.0.1:5000/arena</a>.</p>
     <p id="project-status" role="status" class="text-sm text-slate-600">Checking local setup...</p>
     <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2" aria-label="Setup">
       <h3 class="text-sm font-semibold text-slate-900">Setup</h3>
@@ -1105,6 +1171,7 @@ function renderProjectSetup() {
     </div>
     <details class="rounded border border-slate-200 p-3">
       <summary class="cursor-pointer text-sm font-medium">Review the acceptance test before approval</summary>
+      <p id="project-test-origin" class="mt-3 text-xs text-slate-500"></p>
       <pre id="project-test" class="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-xs text-slate-700"></pre>
       <p id="project-test-hash" class="mt-2 break-all font-mono text-[10px] text-slate-500"></p>
     </details>
@@ -1115,6 +1182,28 @@ function renderProjectSetup() {
     </div>
     <p id="project-next" aria-live="polite" class="text-sm text-slate-600"></p>
     <p class="text-xs text-slate-500">Baseline → Gemini/controlled fault → Arena validation → Kane → Codex (up to 3 attempts) → Kane. Imported code never runs before approval. Source exports, keys and evidence stay local. CLI authentication and credit availability are checked during execution.</p>
+    <div class="rounded-lg border border-slate-300 p-4 space-y-3" aria-labelledby="judge-workflow-heading">
+      <div>
+        <h3 id="judge-workflow-heading" class="text-sm font-semibold text-slate-900">Test-targeted judge workflow</h3>
+        <p class="mt-1 text-xs text-slate-600">Choose a LOCAL static-data site. Kane designs its browser test from the site contract; Arena locks the definition and requires two verified healthy runs. Gemini then proposes one data-field fault for your review. Approve that fault to continue to Kane detection, Codex repair and Kane reverification. This path needs local CLI setup and uses credits.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="judge-start" type="button" disabled class="rounded bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Start judge workflow</button>
+        <span id="judge-project-label" class="text-xs text-slate-600">Selected app: BreakShop</span>
+      </div>
+      <p id="judge-status" role="status" aria-live="polite" class="text-sm text-slate-700">Select a supported app and check local setup to begin.</p>
+      <ol id="judge-events" class="list-decimal pl-5 text-xs text-slate-600 space-y-1"></ol>
+      <div id="judge-proposal" hidden class="rounded border border-amber-300 bg-amber-50 p-3 space-y-2">
+        <h4 class="text-sm font-semibold text-amber-950">Operator decision required · no fault applied yet</h4>
+        <p id="judge-fault-description" class="text-sm text-slate-800"></p>
+        <pre id="judge-fault-diff" class="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-white p-3 font-mono text-xs text-slate-800"></pre>
+        <div class="flex flex-wrap gap-2">
+          <button id="judge-approve-fault" type="button" class="rounded bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Approve fault</button>
+          <button id="judge-reject-fault" type="button" class="rounded border border-slate-400 px-3 py-2 text-xs font-semibold text-slate-800">Reject fault</button>
+        </div>
+      </div>
+    </div>
+    ${renderJudgeHistory(judgeWorkflows)}
   </section>`;
 }
 
@@ -1209,7 +1298,8 @@ export function renderArenaDashboard(state) {
   } = state;
 
   const parts = [renderWorkspaceBanner(payload, activePreviewKey),
-    ...(activePreviewKey === 'archive' || payload.autoSample ? [renderProjectSetup()] : [])];
+    ...(activePreviewKey === 'archive' || payload.autoSample
+      ? [renderProjectSetup(payload.judgeWorkflows)] : [])];
 
   if (payload.status === 'loading') {
     parts.push(renderLoadingState());

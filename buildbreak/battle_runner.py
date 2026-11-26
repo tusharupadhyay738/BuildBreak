@@ -102,6 +102,7 @@ def snapshot(source, destination):
              'buildbreak/kane_live.py', 'buildbreak/generated_suite.py',
              'buildbreak/live_browser.py', 'buildbreak/project_import.py', 'buildbreak/project_setup.py',
              'buildbreak/seatpilot_adapter.py', 'buildbreak/seatpilot_runner.py',
+             'buildbreak/judge_history.py',
              'requirements.txt', TEST.as_posix()]
     for folder in ('templates', 'static'):
         files += [p.relative_to(source).as_posix() for p in (source / folder).rglob('*') if p.is_file()]
@@ -149,7 +150,7 @@ class Server:
         self.logs = [open(self.artifacts / 'server.stdout.log', 'a', encoding='utf-8'),
                      open(self.artifacts / 'server.stderr.log', 'a', encoding='utf-8')]
         launcher = ('import sys; from app import create_app; '
-                    'create_app({"DATABASE":sys.argv[1]}).run(host="127.0.0.1",port=int(sys.argv[2]))')
+                    'create_app({"DATABASE":sys.argv[1],"ARENA_ISOLATED_COPY":True}).run(host="127.0.0.1",port=int(sys.argv[2]))')
         self.process = owned_spawn([self.python, '-c', launcher, str(self.database), str(self.port)],
                                         cwd=self.workspace, stdout=self.logs[0], stderr=self.logs[1],
                                         env=child_environment('app', self.workspace))
@@ -311,12 +312,14 @@ def run_kane(workspace, artifacts, url, name, kane, timeout=1200, show_browser=F
 
 
 def _run_testmd(workspace, artifacts, url, name, kane, test_path, expected_steps, timeout=1200,
-                show_browser=False, on_line=None, cdp_endpoint=None, variables_file=None):
+                show_browser=False, on_line=None, cdp_endpoint=None, variables_file=None, author=False):
     artifacts.mkdir(parents=True, exist_ok=False)
     test_hash = digest(workspace / test_path)
     args = [kane, 'testmd', 'run', str(test_path), '--override-start-url', url,
             '--target', 'desktop', '--no-adaptive-heal',
-            '--timeout', '300', '--name', name, '--agent']
+            '--timeout', '300', '--name', name, '--agent', '--bug-detection', 'stop']
+    if author:
+        args.append('--author')
     if variables_file is not None:
         args.extend(['--variables-file', str(variables_file)])
     if not show_browser:

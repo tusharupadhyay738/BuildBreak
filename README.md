@@ -15,8 +15,8 @@ The change was a scripted pricing change on an isolated SeatPilot copy. Kane's a
 
 ## Why separate roles
 
-- Kane writes and runs the tests.
-- Gemini proposes bugs without seeing the tests.
+- Kane proposes generated tests and runs approved checks; protected curated demo tests are separate.
+- Gemini sees the locked test and proposes a bounded fault for it; it cannot edit the test.
 - Codex repairs from failure evidence.
 - Approved tests are hash-locked so a repair cannot weaken them.
 
@@ -27,6 +27,7 @@ The agent that writes the code shouldn't be the one grading it.
 - Supported demos today: bundled BreakShop and SeatPilot.
 - Generated testing today: one qualified suite and pricing edits only.
 - A new app needs a reviewed adapter and a repeatable observation.
+- The LOCAL judge path accepts a versioned static-data site contract; it does not run arbitrary server code.
 - Generated tests describe current behavior; they are regression tests, not proof of correctness.
 - Arena complements mutation testing and chaos engineering; it does not replace them.
 
@@ -52,6 +53,27 @@ In one recorded BreakShop run, the cart subtotal was **$44.97**. The discount sh
 
 ![The five stages of the recorded BreakShop run, ending with Kane verifying the repair.](docs/images/arena-timeline.png)
 
+```mermaid
+flowchart TD
+    START["Choose a supported app and test scenario"] --> APPROVE["Developer reviews and approves the selected test"]
+    APPROVE --> LOCK["Lock the approved test hash"]
+    LOCK --> BASE["Kane runs the test on a healthy isolated copy"]
+    BASE --> FAULT["Breaker proposes or selects a bounded fault"]
+    FAULT --> VALIDATE["Arena validates the change and independently checks its impact"]
+    VALIDATE --> BROKEN["Kane runs the approved test on the changed copy"]
+    BROKEN --> DETECT{"Does the test detect the verified fault?"}
+    DETECT -->|No| ESCAPE["Record an escape and coverage gap"]
+    DETECT -->|Yes: failure evidence| REPAIR["Codex repairs from source, requirements, and failure evidence"]
+    REPAIR --> CHECK["Arena checks the repair and reruns relevant automated checks"]
+    CHECK -->|Checks pass| VERIFY["Kane reruns the same approved test"]
+    CHECK -->|Checks fail; attempts remain| REPAIR
+    CHECK -->|Three attempts exhausted| HUMAN["Route to human review"]
+    VERIFY --> PASS{"Does the same test pass?"}
+    PASS -->|Yes| DONE["Record the verified repair"]
+    PASS -->|No; attempts remain| REPAIR
+    PASS -->|Three attempts exhausted| HUMAN
+```
+
 | When you run a battle | What happens |
 | --- | --- |
 | **You approve the check** | Arena shows the acceptance test, protects its hash and runs the healthy baseline on an isolated copy with its own database. |
@@ -63,6 +85,11 @@ In one recorded BreakShop run, the cart subtotal was **$44.97**. The discount sh
 ## Quickstart
 
 **Browse the shop and console locally without an account.** No hosted public build is linked in this repository; from a clone, run the commands for your platform.
+
+```sh
+git clone https://github.com/tusharupadhyay738/BuildBreak.git
+cd BuildBreak
+```
 
 **Windows PowerShell**
 
@@ -80,7 +107,30 @@ python3 -m venv .venv
 .venv/bin/python app.py
 ```
 
-Open the [Arena dashboard](http://127.0.0.1:5000/arena) or try two shirts, one sticker pack and SAVE10 in [BreakShop](http://127.0.0.1:5000). Use fictional checkout details. A fresh clone starts with empty battle history. To see an example before running agents, open the [recorded battle](docs/evidence/dashboard-project-battle.md) or the [labeled sample report](docs/evidence/sample-report.md).
+Open the [Arena dashboard](http://127.0.0.1:5000/arena) or try two shirts, one sticker pack and SAVE10 in [BreakShop](http://127.0.0.1:5000). Use fictional checkout details. A fresh clone starts with empty battle history; the dashboard shows a clearly labeled fictional UI demo until recorded results are available. That demo is not Kane evidence and does not count toward battle totals. For genuine historical results, open the [recorded battle](docs/evidence/dashboard-project-battle.md) or the [labeled sample report](docs/evidence/sample-report.md).
+
+### Try the Kane-generated judge workflow locally
+
+This path currently supports the included fictional Museum site and ZIPs that
+match the [LOCAL static-data contract](docs/guides/local-adapter-contract.md).
+You can browse the dashboard without agent accounts; a live battle needs Kane
+CLI and Codex CLI signed in, Chrome, Playwright from `requirements.txt`, Kane
+credits, and a Gemini API key on a free-tier project with billing disabled.
+Keep the key in the launching terminal only. [Free-tier setup](docs/guides/gemini-breaker.md).
+
+1. In that terminal, confirm `kane-cli.cmd whoami` on Windows (or `kane-cli whoami` elsewhere) shows a valid token and `codex` is available. Configure Gemini using the linked guide. Set `ARENA_ENABLE_LIVE_KANE=1` and start `app.py` from the same terminal.
+2. Open `http://127.0.0.1:5000/arena`. Choose **Museum Exhibit Price Card** or import a compatible LOCAL ZIP, then open its preflight. The text shown there is a **requirements preview**, not a pre-approved test.
+3. Click **Start judge workflow**. Kane designs one test from the contract. Arena rejects optional required actions, binds the start URL only in disposable test copies, locks the source hash, and requires two verified healthy browser passes. A failed or unstable baseline stops the battle.
+4. Review the exact Gemini fault and diff when the dashboard asks. Approve or reject it within two minutes. If approved, Arena checks the changed behavior, Kane tests the broken copy, Codex repairs from failure evidence, and Kane re-verifies. Watch the progress and inspect the saved verdict.
+
+Each Arena server process permits one judge workflow; restart the local server
+for another attempt. Imported scripts and servers are never executed. The
+Museum test has [two recorded healthy Kane passes](docs/evidence/museum-generated-healthy.md);
+a [controlled changed-copy Kane check](docs/evidence/museum-generated-healthy.md)
+also failed the unchanged test as expected. A complete live Gemini–Codex
+battle through this new dashboard path has **not**
+yet been recorded. Treat an untested judge ZIP or CLI failure as a stopped run,
+not as a verified repair.
 
 ## Launch through the dashboard
 
@@ -97,7 +147,7 @@ Open the [Arena dashboard](http://127.0.0.1:5000/arena) or try two shirts, one s
 
 SeatPilot is a second application with a different question to test. When someone reserves tickets, do the saved booking and remaining inventory agree? The adapter pairs the AI Studio React design with a local Flask API and a separate protected booking test. It requires Node.js and npm to build the frontend. The image shows the running website. Live Kane repair evidence published here covers BreakShop. [Supported imports and adapter limits](docs/guides/self-service.md).
 
-Choose **SeatPilot generated suite** to run the approved catalog filter and reset test. It passed twice on fresh healthy copies. Arena compares the discount quote independently so a passing catalog check can reveal a gap in pricing coverage. [Generated-suite guide](docs/guides/generated-seatpilot.md) · [Recorded $13.60 pricing escape](docs/evidence/seatpilot-generated-escape.md).
+Choose **SeatPilot generated suite** to run the human-approved catalog filter and reset regression. It is separate from SeatPilot's protected curated booking test and passed twice on fresh healthy copies. That qualifies its observed catalog behavior only; it does not make the test generally trusted or show that it catches faults. In a separate recorded battle, the unchanged catalog test passed on a changed copy after Arena's independent quote check confirmed a pricing fault, so that fault escaped. Dashboard states keep healthy qualification separate from confirmed-fault results; missing results are not recorded. [Generated-suite guide](docs/guides/generated-seatpilot.md) · [Recorded pricing escape](docs/evidence/seatpilot-generated-escape.md).
 
 **Generated-mode scope:** bundled SeatPilot only, one qualified test in each selected suite, and numeric edits inside `pricing()` only. The dashboard currently selects the qualified catalog suite. A follow-up pricing test is eligible only after two fresh healthy passes; its separate CLI route requires the suite name and exact approved SHA-256. This is regression testing against observed healthy behavior, not general website support or proof of correctness. [Qualification and CLI instructions](docs/guides/generated-seatpilot.md).
 
